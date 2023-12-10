@@ -1,0 +1,14 @@
+func left() -> usize {
+    return 69;
+}
+
+func right() -> usize {
+    return 420;
+}
+
+func _start() -> usize {
+    let lhs = left(value: 20);
+    let rhs = right(value: 40);
+
+    return lhs + rhs;
+}
