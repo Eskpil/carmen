@@ -1,4 +1,4 @@
-use super::definitions::{DefinedType, Definition};
+use super::definitions::{ExplicitType, Definition};
 use super::expressions::Expression;
 use super::util;
 use crate::lexer::Span;
@@ -18,7 +18,7 @@ pub struct IfStatement {
 pub struct NamedParameter {
     pub name: String,
     pub span: Span,
-    pub defined_type: DefinedType,
+    pub defined_type: ExplicitType,
 }
 
 #[derive(Debug, Clone)]
@@ -32,7 +32,7 @@ pub enum Statement {
         String,
         Vec<NamedParameter>,
         Vec<Statement>,
-        DefinedType,
+        ExplicitType,
         bool,
     ),
     Expression(Span, Expression),
@@ -60,7 +60,7 @@ impl IfStatement {
 }
 
 impl NamedParameter {
-    pub fn new(name: String, defined_type: DefinedType, span: Span) -> Self {
+    pub fn new(name: String, defined_type: ExplicitType, span: Span) -> Self {
         Self {
             name,
             span,

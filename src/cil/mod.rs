@@ -20,9 +20,11 @@ pub enum Stage {
     Local,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Type {
     Usize,
+    U8,
+    Pointer(Box<Type>)
 }
 
 #[derive(Debug, Clone)]
@@ -38,11 +40,16 @@ pub struct FunctionDeclaration {
 }
 
 #[derive(Debug, Clone)]
-pub enum Declaration {
-    Function(FunctionDeclaration)
+pub struct DataDeclaration {
+    pub name: String,
+    pub data: Vec<u8>,
 }
 
-
+#[derive(Debug, Clone)]
+pub enum Declaration {
+    Function(FunctionDeclaration),
+    Data(DataDeclaration)
+}
 
 #[derive(Debug, Clone)]
 pub struct LiteralExpression(pub u64);
@@ -62,7 +69,12 @@ pub struct CallExpression {
 
 #[derive(Debug, Clone)]
 pub struct VariableLookupExpression {
-    pub id: u32,
+    pub variable: Variable,
+}
+
+#[derive(Debug, Clone)]
+pub struct UseDataExpression {
+    pub name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -70,17 +82,29 @@ pub enum Expression {
     Literal(LiteralExpression),
     Binary(BinaryExpression),
     Call(CallExpression),
-    VariableLookup(VariableLookupExpression)
+    VariableLookup(VariableLookupExpression),
+    UseData(UseDataExpression),
 }
 
 #[derive(Debug, Clone)]
 pub struct ReturnStatement {
-    pub(crate) expr: Expression,
+    pub expr: Expression,
 }
 
 #[derive(Debug, Clone)]
+pub struct DeclareVariableStatement {
+    pub variable: Variable,
+    pub expr: Expression,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExpressionStatement(pub Expression);
+
+#[derive(Debug, Clone)]
 pub enum Statement {
-    Return(ReturnStatement)
+    Return(ReturnStatement),
+    DeclareVariable(DeclareVariableStatement),
+    Expression(ExpressionStatement),
 }
 
 #[derive(Debug, Clone)]
@@ -94,6 +118,8 @@ pub struct FunctionDefinition {
     pub name: String,
     pub block: Block,
 }
+
+
 
 #[derive(Debug, Clone)]
 pub struct Variable {
@@ -124,13 +150,6 @@ pub struct TypeChecker {
 
     scope_id_counter: u32,
     variable_id_counter: u32,
-}
-
-impl Expression {
-    // TODO: Implement
-    pub fn returns(&self) -> Type {
-        Type::Usize
-    }
 }
 
 impl Scope {
@@ -186,6 +205,10 @@ impl TypeChecker {
         }
     }
 
+
+    pub fn current_scope_mut(&mut self) -> Option<&mut Scope> {
+        self.scopes.front_mut()
+    }
     pub fn current_scope(&self) -> Option<&Scope> {
         return self.scopes.front();
     }
@@ -246,5 +269,25 @@ impl TypeChecker {
         }
 
         None
+    }
+
+    pub fn push_variable(&mut self, var: Variable) {
+        let scope = self.scopes.front_mut().expect("no scope");
+        scope.variables.push(var);
+    }
+
+    pub fn expression_returns(&self, expr: &Expression) -> Type {
+        match expr {
+            Expression::Literal(_) => Type::Usize,
+            Expression::Call(call) => {
+                let declaration = self.find_function_declaration(call.name.clone()).expect("could not find declaration");
+                declaration.signature.returns[0].clone()
+            }
+            Expression::Binary(_) => Type::Usize,
+            Expression::VariableLookup(var) => {
+                var.variable.typ.clone()
+            }
+            Expression::UseData(data) => Type::Pointer(Box::new(Type::U8)),
+        }
     }
 }

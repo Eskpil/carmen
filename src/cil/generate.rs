@@ -1,6 +1,6 @@
-use crate::ast::{self, definitions::DefinedType};
+use crate::ast::{self, definitions::ExplicitType};
 
-use super::{Block, Declaration, FunctionDeclaration, FunctionDefinition, Program, ReturnStatement, Statement, Type, TypeChecker, Variable};
+use super::{Block, Declaration, DeclareVariableStatement, ExpressionStatement, FunctionDeclaration, FunctionDefinition, Program, ReturnStatement, Statement, Type, TypeChecker, Variable};
 
 /*
 
@@ -13,6 +13,24 @@ use super::{Block, Declaration, FunctionDeclaration, FunctionDefinition, Program
     TODO: Name the stages.
  */
 
+fn convert_type(explicit_type: &ExplicitType) -> Type {
+    let typ =match explicit_type {
+        ExplicitType::Name(name) => {
+            match name.as_str() {
+                "usize" => Type::Usize,
+                "u8" => Type::U8,
+                other => todo!("implement explicit type: {other}")
+            }
+        }
+        ExplicitType::Pointer(to) => {
+            Type::Pointer(Box::new(convert_type(&*to)))
+        }
+        other => todo!("implement type: {:?}", other)
+    };
+
+    typ
+}
+
 impl TypeChecker {
     pub fn generate_function_declaration(&self, stmt: &ast::statements::Statement) -> FunctionDeclaration {
         match stmt {
@@ -21,10 +39,10 @@ impl TypeChecker {
                 let mut returns: Vec<Type> = vec![];
 
                 for param in parameters.iter() {
-                    accepts.push(Type::Usize)
+                    accepts.push(convert_type(&param.defined_type));
                 }
 
-                if return_type.clone() != DefinedType::Empty {
+                if return_type.clone() != ExplicitType::Empty {
                     returns.push(Type::Usize);
                 }
 
@@ -49,9 +67,7 @@ impl TypeChecker {
                     let expr = self.typecheck_expression(expr);
 
                     if let Some(scope) = self.current_scope() {
-                        if Some(expr.returns()) != scope.expected_return_type {
-                            println!("{:?} != {:?}", expr.returns(), scope.expected_return_type);
-
+                        if Some(self.expression_returns(&expr)) != scope.expected_return_type {
                             todo!("implement type errors")
                         }
                     } else {
@@ -60,7 +76,23 @@ impl TypeChecker {
 
                     Statement::Return(ReturnStatement{expr})
                 }
-                _ => todo!("implement")
+                ast::statements::Statement::Declaration(_, name, expr) => {
+                    let expr = self.typecheck_expression(expr);
+
+                    let variable = Variable {
+                        name: name.clone(),
+                        typ:  Type::Usize,
+                        id: self.get_variable_id(),
+                    };
+
+                    self.push_variable(variable.clone());
+                    Statement::DeclareVariable(DeclareVariableStatement{ variable, expr })
+                }
+                ast::statements::Statement::Expression(_, expr) => {
+                    let expr = self.typecheck_expression(expr);
+                    Statement::Expression(ExpressionStatement(expr))
+                }
+                s => todo!("implement: {:?}", s)
             };
 
             block.statements.push(typechecked_stmt);
@@ -69,9 +101,13 @@ impl TypeChecker {
         block
     }
 
-    pub fn generate_function_definition(&mut self, stmt: &ast::statements::Statement) -> FunctionDefinition {
+    pub fn generate_function_definition(&mut self, stmt: &ast::statements::Statement) -> Option<FunctionDefinition> {
         match stmt {
             ast::statements::Statement::Function(_, name, parameters, body, _, _) => {
+                if 0 >= body.len() {
+                    return None;
+                }
+
                 let mut scope = self.new_scope();
                 scope.expected_return_type = Some(Type::Usize);
 
@@ -90,10 +126,10 @@ impl TypeChecker {
                 let mut block = self.generate_block(body.clone());
                 block.parameters = parameters;
 
-                return FunctionDefinition {
+                return Some(FunctionDefinition {
                     name: name.clone(),
                     block,
-                }
+                });
             }
             _ => todo!("do this better"),
         }
@@ -118,7 +154,9 @@ impl TypeChecker {
             ast::statements::Statement::Program(_, stmts) => {
                 for function_stmt in stmts.iter() {
                     let definition = self.generate_function_definition(function_stmt);
-                    self.program.definitions.push(definition);
+                    if let Some(definition) = definition {
+                        self.program.definitions.push(definition);
+                    }
                 }
             }
             _ => todo!("implement"),

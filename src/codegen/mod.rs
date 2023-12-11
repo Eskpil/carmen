@@ -1,19 +1,18 @@
 use cranelift_codegen::entity::EntityRef;
-use cranelift_codegen::ir::{types::*, ExtFuncData, ExternalName, Function, KnownSymbol, LibCall, UserExternalName, UserFuncName, Value};
+use cranelift_codegen::ir::{types::*, ExtFuncData, ExternalName, Function, LibCall, UserExternalName, UserFuncName, Value};
 use cranelift_codegen::ir::{AbiParam, InstBuilder, Signature};
 use cranelift_codegen::isa::{lookup, CallConv};
 use cranelift_codegen::settings;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
-use cranelift_module::{FuncId, Linkage, Module};
+use cranelift_module::{DataDescription, DataId, default_libcall_names, FuncId, Linkage, Module};
 use cranelift_object::{ObjectBuilder, ObjectModule};
-use target_lexicon::{Architecture, BinaryFormat, Environment, OperatingSystem, Riscv64Architecture, Triple, Vendor};
+use target_lexicon::{Architecture, BinaryFormat, Environment, OperatingSystem, Triple, Vendor};
 
 use std::collections::HashMap;
-use std::env::var;
-use std::ops::Index;
-use cranelift_module::FuncOrDataId::Func;
 
 use crate::{cil};
+use crate::ast::BinaryOp;
+
 #[derive(Clone)]
 struct FuncIdEntry {
     id: FuncId,
@@ -26,7 +25,10 @@ pub struct Context {
     module: ObjectModule,
 
     func_id_cache: HashMap<String, FuncIdEntry>,
+    data_id_cache: HashMap<String, DataId>,
     variables: HashMap<u32, Variable>,
+
+    block_has_returned: bool,
 }
 
 fn convert_type(cil_type: &cil::Type) -> Type {
@@ -85,14 +87,16 @@ impl Context {
             module,
 
             func_id_cache: HashMap::new(),
+            data_id_cache: HashMap::new(),
+
             variables: HashMap::new(),
+
+            block_has_returned: false,
         }
     }
 
     pub fn generate_function_declaration(&mut self, declaration: &cil::FunctionDeclaration) {
         let sig = convert_signature(&declaration.signature);
-
-        println!("declaring function: {}", declaration.name);
 
         let func_id = self
             .module
@@ -105,11 +109,26 @@ impl Context {
         });
     }
 
+    pub fn generate_data_declaration(&mut self, declaration: &cil::DataDeclaration) {
+        let data_id = self.module.declare_data(&declaration.name, Linkage::Export, true, false).expect("could not declare data");
+
+        let mut data_description = DataDescription::new();
+        let slice = declaration.data.clone().into_boxed_slice();
+        data_description.define(slice);
+
+        self.module.define_data(data_id, &data_description).expect("could not define data");
+
+        self.data_id_cache.insert(declaration.name.clone(), data_id);
+    }
+
     pub fn generate_declarations(&mut self, declarations: Vec<cil::Declaration>) {
         for declaration in declarations.iter() {
             match declaration {
                 cil::Declaration::Function(function) => {
                     self.generate_function_declaration(function);
+                }
+                cil::Declaration::Data(data) => {
+                    self.generate_data_declaration(data);
                 }
             }
         }
@@ -119,19 +138,35 @@ impl Context {
         self.func_id_cache.get_mut(&*name).expect("no func id")
     }
 
-    pub fn generate_expression(&mut self, expr: &cil::Expression, builder: &mut FunctionBuilder) -> Value {
+    pub fn generate_expression(&mut self, expr: &cil::Expression, builder: &mut FunctionBuilder) -> Vec<Value> {
         match expr {
             cil::Expression::Literal(lit) => {
-                builder.ins().iconst(I64, lit.0 as i64)
+                vec![builder.ins().iconst(I64, lit.0 as i64)]
             }
             cil::Expression::Binary(bin) => {
                 let lhs = self.generate_expression(&*bin.lhs, builder);
                 let rhs = self.generate_expression(&*bin.rhs, builder);
 
-                builder.ins().iadd(lhs, rhs)
+                assert!(lhs.len() > 0);
+                assert!(rhs.len() > 0);
+
+                let res = match bin.op {
+                    BinaryOp::Add => {
+                        vec![builder.ins().iadd(lhs[0], rhs[0])]
+                    }
+                    BinaryOp::Sub => {
+                        vec![builder.ins().isub(lhs[0], rhs[0])]
+                    }
+                    BinaryOp::Mul => {
+                        vec![builder.ins().imul(lhs[0], rhs[0])]
+                    }
+                    b => todo!("implement: {}", b.to_string())
+                };
+
+                res
             }
             cil::Expression::VariableLookup(vl) => {
-                builder.use_var(Variable::from_u32(vl.id))
+                vec![builder.use_var(Variable::from_u32(vl.variable.id))]
             }
             cil::Expression::Call(call) => {
                 let cache = self.func_id_cache.clone();
@@ -151,11 +186,21 @@ impl Context {
                 let mut arguments = Vec::<Value>::new();
 
                 for arg in &call.arguments {
-                    arguments.push(self.generate_expression(&*arg, builder));
+                    let expr = self.generate_expression(&*arg, builder);
+                    assert!(expr.len() > 0);
+                    arguments.push(expr[0]);
                 }
 
                 let result = builder.ins().call(func_ref, &arguments);
-                builder.inst_results(result).get(0).expect("no results?!?").clone()
+                builder.inst_results(result).to_vec()
+            }
+            cil::Expression::UseData(data) => {
+                let cache = self.data_id_cache.clone();
+                let data_id = cache.get(&*data.name).expect("could not find data id");
+
+                let global_value = self.module.declare_data_in_func(*data_id, &mut builder.func);
+                let val = builder.ins().global_value(I64, global_value);
+                vec![val]
             }
             x => todo!("implement: {:?}", x)
         }
@@ -165,7 +210,19 @@ impl Context {
         match stmt {
             cil::Statement::Return(ret) => {
                 let val = self.generate_expression(&ret.expr, builder);
-                builder.ins().return_(&[val]);
+                builder.ins().return_(&val);
+                self.block_has_returned = true;
+            }
+            cil::Statement::DeclareVariable(decl) => {
+                let val = self.generate_expression(&decl.expr, builder)[0];
+                let var  =Variable::from_u32(decl.variable.id);
+                builder.declare_var(var, convert_type(&decl.variable.typ));
+                builder.def_var(var, val);
+                self.variables.insert(decl.variable.id, var);
+            }
+            cil::Statement::Expression(expr) => {
+                println!("codegen for expression statement");
+                self.generate_expression(&expr.0, builder);
             }
             x => todo!("implement: {:?}", x)
         }
@@ -197,19 +254,27 @@ impl Context {
             has_switched_block = true
         }
 
-        builder.seal_block(ir_block);
+        // builder.seal_block(ir_block);
 
         for stmt in block.statements.clone() {
             self.generate_statement(&stmt, builder);
         }
+
+        if !self.block_has_returned {
+            builder.ins().return_(&[]);
+        }
+
+        self.block_has_returned = false;
     }
 
     pub fn generate_function_definition(&mut self, definition: &cil::FunctionDefinition) {
+        println!("generating definition for {}", definition.name);
+
         // inefficient, i do not care. Borrow checker got me tired.
         let cache = self.func_id_cache.clone();
         let entry = cache.get(&*definition.name).expect("could not find entry");
 
-        let mut func = Function::with_name_signature(UserFuncName::user(0, 0), entry.sig.clone());
+        let mut func = Function::with_name_signature(UserFuncName::user(0, entry.id.as_u32()), entry.sig.clone());
 
         let mut builder_context = FunctionBuilderContext::new();
         let mut builder = FunctionBuilder::new(&mut func, &mut builder_context);
@@ -218,9 +283,8 @@ impl Context {
 
         builder.seal_all_blocks();
         builder.finalize();
-
+//
         self.ctx.func = func;
-
         println!("{}", self.ctx.func.display());
 
         self.module

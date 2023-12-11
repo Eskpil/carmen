@@ -12,8 +12,8 @@ use crate::ast::{
     definitions::{
         StructDefinition, 
         Definition, 
-        FieldDefinition, 
-        DefinedType
+        FieldDefinition,
+        ExplicitType
     }
 };
 use crate::lexer::{Lexer, Token, TokenKind, Span};
@@ -504,7 +504,7 @@ impl Parser {
             let field_name = self.consume_next(TokenKind::Identifier)?.value.clone();  
             self.consume(TokenKind::Colon)?;
 
-            let mut defined_type: Option<DefinedType> = None;
+            let mut defined_type: Option<ExplicitType> = None;
             let field_type = self.consume_next(TokenKind::Identifier)?.value.clone();
              
 
@@ -513,9 +513,9 @@ impl Parser {
                 let has_field = self.consume_next(TokenKind::Identifier)?.value.clone();
                 self.consume(TokenKind::Greater)?;
 
-                defined_type = Some(DefinedType::Array(Box::new(DefinedType::name(has_field))));
+                defined_type = Some(ExplicitType::Array(Box::new(ExplicitType::name(has_field))));
             } else {
-                defined_type = Some(DefinedType::Name(field_type));   
+                defined_type = Some(ExplicitType::Name(field_type));
             } 
 
             let field = FieldDefinition::new(field_name, defined_type.unwrap());
@@ -531,12 +531,16 @@ impl Parser {
         Ok(stmt)
     }
 
-    pub fn parse_defined_type(&mut self) -> ParseResult<DefinedType> {
+    pub fn parse_defined_type(&mut self) -> ParseResult<ExplicitType> {
         match self.peek() {
             TokenKind::Identifier => {
                 let name = self.consume_next(TokenKind::Identifier)?.value.clone();         
-                Ok(DefinedType::Name(name))
-            }   
+                Ok(ExplicitType::Name(name))
+            }
+            TokenKind::Mul => {
+                self.consume_next(TokenKind::Mul)?;
+                Ok(ExplicitType::Pointer(Box::new(self.parse_defined_type()?)))
+            }
             o => todo!("Parse defined type for: {:?}", o)
         } 
     }
@@ -573,7 +577,7 @@ impl Parser {
 
         let r_paren = self.consume_next(TokenKind::RightParen)?;
 
-        let mut returning = DefinedType::Empty;
+        let mut returning = ExplicitType::Empty;
 
         if self.peek() == TokenKind::Arrow {
             self.consume(TokenKind::Arrow)?;  

@@ -5,7 +5,6 @@ mod errors;
 mod lexer;
 mod parser;
 mod unescape;
-mod old_codegen;
 
 use std::fs;
 use std::io::Write;
@@ -17,8 +16,8 @@ use crate::cil::TypeChecker;
 
 fn main() {
     let mut parser = Parser::new(
-        include_str!("../tests/add.cn").to_owned(),
-        "tests/add.cn".to_owned(),
+        include_str!("../tests/print.cn").to_owned(),
+        "tests/print.cn".to_owned(),
     );
 
     let mut children = Vec::<Statement>::new();

@@ -1,0 +1,6 @@
+extern fn exit(code: usize);
+
+fn _start() {
+    let i = 69;
+    exit(code: i);
+}

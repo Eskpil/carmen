@@ -1,0 +1,6 @@
+extern fn write(fd: usize, buf: *u8, size: usize) -> usize;
+extern fn exit(code: usize);
+
+fn main() -> usize {
+    return write(fd: 1, buf: "Hello, World\n", size: 13);
+}

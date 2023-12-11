@@ -1,14 +1,15 @@
-func left() -> usize {
-    return 69;
+extern fn exit(code: usize);
+
+fn left() -> usize {
+    return 50 + 50 - 31;
 }
 
-func right() -> usize {
-    return 420;
+fn right() -> usize {
+    return 20 * 20;
 }
 
-func _start() -> usize {
-    let lhs = left(value: 20);
-    let rhs = right(value: 40);
-
-    return lhs + rhs;
+fn _start() {
+    let right = right();
+    let left = left();
+    exit(code: left + right);
 }

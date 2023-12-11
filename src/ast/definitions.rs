@@ -1,9 +1,11 @@
 use super::util;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum DefinedType {
+pub enum ExplicitType {
     Name(String),
-    Array(Box<DefinedType>),
+    Array(Box<ExplicitType>),
+    Pointer(Box<ExplicitType>),
+
     // Leave this to the type inference.
     Empty,
 }
@@ -11,7 +13,7 @@ pub enum DefinedType {
 #[derive(Debug, Clone)]
 pub struct FieldDefinition {
     pub name: String,
-    pub defined_type: DefinedType,
+    pub defined_type: ExplicitType,
 }
 
 #[derive(Debug, Clone)]
@@ -45,14 +47,14 @@ impl Definition {
     }
 }
 
-impl DefinedType {
+impl ExplicitType {
     pub fn name(name: String) -> Self {
         Self::Name(name)
     }
 
     pub fn to_name(&self) -> String {
         match self {
-            DefinedType::Name(n) => n.clone(),
+            ExplicitType::Name(n) => n.clone(),
             o => unreachable!(
                 "Expected DefinedType::Name() but found DefinedType::{:?}",
                 o
@@ -62,15 +64,19 @@ impl DefinedType {
 
     pub fn print(&self, indent: usize) {
         match self {
-            DefinedType::Name(s) => {
+            ExplicitType::Name(s) => {
                 util::print_indent(indent, "Name:".into());
                 util::print_indent(indent + 1, s.clone());
             }
-            DefinedType::Array(of) => {
+            ExplicitType::Array(of) => {
                 util::print_indent(indent, "Array::".into());
                 of.print(indent + 1);
             }
-            DefinedType::Empty => {
+            ExplicitType::Pointer(to) => {
+                util::print_indent(indent, "Pointer::".into());
+                to.print(indent + 1);
+            }
+            ExplicitType::Empty => {
                 util::print_indent(indent, "Empty".into());
             }
         }
@@ -84,7 +90,7 @@ impl StructDefinition {
 }
 
 impl FieldDefinition {
-    pub fn new(field_name: String, defined_type: DefinedType) -> Self {
+    pub fn new(field_name: String, defined_type: ExplicitType) -> Self {
         Self {
             name: field_name,
             defined_type,
