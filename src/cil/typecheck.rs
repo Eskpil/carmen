@@ -56,6 +56,7 @@ impl TypeChecker {
                     let signature_accept = &declaration.signature.accepts[i];
                     let typechecked_argument = self.typecheck_expression(&argument.value);
                     if *signature_accept != self.expression_returns(&typechecked_argument) {
+                        println!("func: {name} sig: {:?} arg: {:?}", signature_accept, self.expression_returns(&typechecked_argument));
                         todo!("throw type error");
                     }
                     arguments.push(Box::new(typechecked_argument));

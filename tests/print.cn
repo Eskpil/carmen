@@ -1,6 +1,11 @@
 extern fn write(fd: usize, buf: *u8, size: usize) -> usize;
-extern fn exit(code: usize);
+extern fn strlen(buf: *u8) -> usize;
+
+fn print(buf: *u8) -> usize {
+    let size = strlen(buf: buf);
+    return write(d: 1, buf: buf, size: size);
+}
 
 fn main() -> usize {
-    return write(fd: 1, buf: "Hello, World\n", size: 13);
+    return print(buf: "This is very cool\n");
 }

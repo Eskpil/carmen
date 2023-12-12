@@ -103,20 +103,20 @@ impl TypeChecker {
 
     pub fn generate_function_definition(&mut self, stmt: &ast::statements::Statement) -> Option<FunctionDefinition> {
         match stmt {
-            ast::statements::Statement::Function(_, name, parameters, body, _, _) => {
+            ast::statements::Statement::Function(_, name, parameters, body, return_type, _) => {
                 if 0 >= body.len() {
                     return None;
                 }
 
                 let mut scope = self.new_scope();
-                scope.expected_return_type = Some(Type::Usize);
+                scope.expected_return_type = Some(convert_type(return_type));
 
                 for param in parameters {
                     let id = self.get_variable_id();
 
                     scope.variables.push(Variable {
                         name: param.name.clone(),
-                        typ: Type::Usize,
+                        typ: convert_type(&param.defined_type),
                         id,
                     })
                 }
