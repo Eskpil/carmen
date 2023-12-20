@@ -6,7 +6,7 @@ use rand::distributions::{Alphanumeric, DistString};
 use crate::ast;
 use crate::ast::definitions::ExplicitType;
 use crate::cil::common::Stage;
-use crate::cil::typecheck::typechecked_ast::{Block, CallExpression, convert_type, DataDeclaration, Declaration, DeclareVariableStatement, DefineVariableStatement, Expression, FunctionDeclaration, FunctionDefinition, LiteralExpression, Module, ModuleName, ReturnStatement, Signature, Statement, Type, UseDataExpression, VariableLookupExpression};
+use crate::cil::typecheck::typechecked_ast::{BinaryExpression, Block, CallExpression, convert_type, DataDeclaration, Declaration, DeclareVariableStatement, DefineVariableStatement, Expression, ExpressionStatement, FunctionDeclaration, FunctionDefinition, LiteralExpression, Module, ModuleName, ReturnStatement, Signature, Statement, Type, UseDataExpression, VariableLookupExpression};
 
 type ModuleId = u32;
 
@@ -253,6 +253,12 @@ impl TypeChecker {
 
                 Expression::UseData(UseDataExpression { name: name.to_owned() } )
             }
+            ast::expressions::Expression::Binary(binary) => {
+                let lhs = self.typecheck_expression(&binary.lhs, module);
+                let rhs = self.typecheck_expression(&binary.rhs, module);
+
+                Expression::Binary(BinaryExpression { op: binary.op, lhs: Box::new(lhs), rhs: Box::new(rhs) })
+            }
 
             e => todo!("implement: {:?}", e)
         }
@@ -322,6 +328,10 @@ impl TypeChecker {
                     }
 
                     vec![Statement::Return(ReturnStatement{expr})]
+                }
+                ast::statements::Statement::Expression(expr) => {
+                    let expr =self.typecheck_expression(&expr.expr, module);
+                    vec![Statement::Expression(ExpressionStatement(expr))]
                 }
 
                 s => todo!("implement s: {:?}", s)
