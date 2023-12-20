@@ -1,0 +1,7 @@
+import "print"
+import "exit"
+
+fn main() -> usize {
+    print(buf: "cool");
+    return 0;
+}

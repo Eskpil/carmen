@@ -1,0 +1,9 @@
+extern fn write(fd: usize, buf: *u8, size: usize);
+
+fn main() {
+    let i = 0;
+    while 10 > i {
+        write(f1: 1, buf: "hello\n", size: 13);
+        let i = i + 1;
+    }
+}

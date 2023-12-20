@@ -10,4 +10,7 @@ cranelift-codegen = "*"
 cranelift-frontend = "*"
 cranelift-module = "*"
 cranelift-object = "*"
+rand = "0.8.5"
+serde =  { version = "1.0.193", features = ["serde_derive", "derive"] }
+serde_json = "1.0.108"
 target-lexicon = "*"

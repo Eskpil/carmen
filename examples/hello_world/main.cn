@@ -1,0 +1,5 @@
+import "io";
+
+fn main() -> usize {
+  return io.print(buf: "Hello, World\n");
+}

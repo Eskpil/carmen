@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::iter::Iterator;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum TokenKind {
@@ -14,6 +15,7 @@ pub enum TokenKind {
     Assignment,
     Let,
 
+    Import,
     Function,
     Struct,
     Colon,
@@ -59,7 +61,7 @@ pub enum TokenKind {
     Eof,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Span {
     pub row: usize,
     pub col: usize,
@@ -98,6 +100,7 @@ impl TokenKind {
             TokenKind::Comma => ",".into(),
             TokenKind::Extern => ",".into(),
 
+            TokenKind::Import => "import".into(),
             TokenKind::Assignment => "=".into(),
             TokenKind::Let => "let".into(),
             TokenKind::Function => "fn".into(),
@@ -221,6 +224,7 @@ impl Lexer {
         keywords.insert("fn".into(), TokenKind::Function);
         keywords.insert("return".into(), TokenKind::Return);
         keywords.insert("extern".into(), TokenKind::Extern);
+        keywords.insert("import".into(), TokenKind::Import);
 
         Self {
             source: source.into(),

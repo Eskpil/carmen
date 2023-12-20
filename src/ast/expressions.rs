@@ -1,34 +1,90 @@
 use crate::lexer::Span;
-use super::{util, BinaryOp};
+use super::{BinaryOp};
 use std::boxed::Box;
-use std::process;
+use std::fmt::format;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LookupExpression {
+    pub span: Span,
+    pub name: String,
+    pub child: Option<Box<LookupExpression>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NamedArgument {
     pub name: String,
     pub span: Span,
     pub value: Expression,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmptyExpression {
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LiteralExpression {
+    pub span: Span,
+    pub val: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BooleanExpression {
+    pub span: Span,
+    pub val: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StringLiteralExpression {
+    pub span: Span,
+    pub val: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdentifierExpression {
+    pub span: Span,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BinaryExpression {
+    pub span: Span,
+    pub op: BinaryOp,
+    pub lhs: Box<Expression>,
+    pub rhs: Box<Expression>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnaryExpression {
+    pub span: Span,
+    pub op: BinaryOp,
+    pub expr: Box<Expression>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CallExpression {
+    pub span: Span,
+    pub name: LookupExpression,
+    pub arguments: Vec<NamedArgument>
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Expression {
-    Empty(Span),
-    Literal(Span, u64),
-    StructInit(Span, String, Vec<NamedArgument>),
-    ArrayInit(Span, Vec<Expression>),
-    ArrayIndex(Span, String, u64),
-    Bool(Span, bool),
-    StringLiteral(Span, String),
-    Identifier(Span, String),
-    Binary(Span, BinaryOp, Box<Expression>, Box<Expression>),
-    Unary(Span, BinaryOp, Box<Expression>),
-    Call(Span, String, Vec<NamedArgument>),
-    Lookup(Span, String, String),
+    Empty(EmptyExpression),
+    Literal(LiteralExpression),
+    Bool(BooleanExpression),
+    StringLiteral(StringLiteralExpression),
+    Identifier(IdentifierExpression),
+    Binary(BinaryExpression),
+    Unary(UnaryExpression),
+    Call(CallExpression),
+    Lookup(LookupExpression)
 }
 
 impl NamedArgument {
     pub fn new(
-        name: String, 
+        name: String,
         expr: Expression,
         span: Span,
     ) -> Self {
@@ -38,105 +94,39 @@ impl NamedArgument {
             value: expr,
         }
     }
-
-    pub fn print(&self, indent: usize) {
-        util::print_indent(indent, format!("Name: {}", self.name)); 
-        self.value.print(indent);
-    }
 }
 
 impl Expression {
     pub fn span(&self) -> Span {
         match self.clone() {
-            Self::Empty(s) => s,
-            Self::Literal(s, _) => s,
-            Self::StructInit(s, _, _) => s,
-            Self::Bool(s, _) => s,
-            Self::StringLiteral(s, _) => s,
-            Self::Identifier(s, _) => s,
-            Self::Binary(s, _, _, _) => s,
-            Self::Unary(s, _, _) => s,
-            Self::Call(s, _, _) => s,
-            Self::Lookup(s, _, _) => s,
-            Self::ArrayInit(s, _) => s,
-            Self::ArrayIndex(s, _, _) => s,
+            Expression::Empty(e) => e.span,
+            Expression::Identifier(var) => var.span,
+            Expression::Literal(lit) => lit.span,
+            Expression::StringLiteral(lit) => lit.span,
+            Expression::Bool(b) => b.span,
+            Expression::Binary(b) => b.span,
+            Expression::Unary(u) => u.span,
+            Expression::Call(c) => c.span,
+            Expression::Lookup(l) => l.span,
         }
     }
 
-    pub fn as_identifier(&self) -> String {
+    pub fn as_identifier(&self) -> Option<String> {
         match self.clone() {
-            Expression::Identifier(_, i) => i.clone(),
-            expr => { 
-                eprintln!("Expression: {:?} cannot be converted into an Identifier", expr); 
-                process::exit(1);
-            }
+            Expression::Identifier(i) => Some(i.name),
+            _ => None,
         }
     }
-
-    pub fn print(&self, indent: usize) {
+    pub fn as_lookup(&self) -> Option<LookupExpression> {
         match self.clone() {
-            Expression::Empty(_) => {
-                util::print_indent(indent, "EmptyExpression".into());
-            }
-            Expression::Bool(_, v) => {
-                util::print_indent(indent, "Bool:".into());
-                util::print_indent(indent + 1, format!("{}", v));
-            }
-            Expression::Literal(_, v) => {
-                util::print_indent(indent, "Literal:".into());
-                util::print_indent(indent + 1, format!("{}", v));
-            }
-            Expression::StructInit(_, name, arguments) => {
-                util::print_indent(indent, "StructInit:".into());
-                util::print_indent(indent + 1, "Name:".into());
-                util::print_indent(indent + 2, name);
-                util::print_indent(indent + 1, "Arguments".into());
-                for arg in arguments {
-                    arg.print(indent + 2);
-                }
-            }
-            Expression::StringLiteral(_, v) => {
-                util::print_indent(indent, "StringLiteral:".into());
-                util::print_indent(indent + 1, format!("\"{v}\""));
-            }
-            Expression::Identifier(_, v) => {
-                util::print_indent(indent, "Identifier:".into());
-                util::print_indent(indent + 1, v.clone());
-            }
-            Expression::Binary(_, op, lhs, rhs) => {
-                util::print_indent(indent, "BinaryExpression:".into());
-                util::print_indent(indent + 1, "op:".into());
-                util::print_indent(indent + 2, op.to_string());
-                util::print_indent(indent + 1, "lhs:".into());
-                lhs.print(indent + 2);
+            Expression::Lookup(l) => Some(l),
+            _ => None
+        }
+    }
+}
 
-                util::print_indent(indent + 1, "rhs:".into());
-                rhs.print(indent + 2);
-            }
-            Expression::Unary(_, op, expr) => {
-                util::print_indent(indent, "UnaryExpression:".into());
-                util::print_indent(indent + 1, "op:".into());
-                util::print_indent(indent + 2, op.to_string());
-                util::print_indent(indent + 1, "expr".into());
-                expr.print(indent + 2);
-            }
-            Expression::Call(_, name, arguments) => {
-                util::print_indent(indent, "CallExpression:".into());
-                util::print_indent(indent + 1, "Name:".into());
-                util::print_indent(indent + 2, name);
-                util::print_indent(indent + 1, "Arguments".into());
-                for arg in arguments {
-                    arg.print(indent + 2);
-                }
-            }
-            Expression::Lookup(_, on, field) => {
-                util::print_indent(indent, "LookupExpression:".into());
-                util::print_indent(indent + 1, "Struct:".into());
-                util::print_indent(indent + 2, on);
-                util::print_indent(indent + 1, "Field:".into());
-                util::print_indent(indent + 2, field);
-            }
-            _ => {}
-        }    
+impl LookupExpression {
+    pub fn to_string(&self) -> String {
+        format!("{}", self.name)
     }
 }

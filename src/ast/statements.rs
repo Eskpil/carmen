@@ -1,10 +1,14 @@
-use super::definitions::{ExplicitType, Definition};
+use super::definitions::{ExplicitType};
 use super::expressions::Expression;
-use super::util;
 use crate::lexer::Span;
 
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
+use crate::cil::typecheck::typechecked_ast::Block;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IfStatement {
+    pub span: Span,
+
     pub cond: Expression,
 
     pub if_block: Vec<Statement>,
@@ -14,35 +18,84 @@ pub struct IfStatement {
     pub else_span: Option<Span>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NamedParameter {
     pub name: String,
     pub span: Span,
     pub defined_type: ExplicitType,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlockStatement {
+    pub span: Span,
+    pub statements: Vec<Statement>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionStatement {
+    pub span: Span,
+    pub name: String,
+    pub parameters: Vec<NamedParameter>,
+    pub block: BlockStatement,
+    pub return_type: ExplicitType,
+    pub external: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExpressionStatement {
+    pub span: Span,
+    pub expr: Expression,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WhileStatement {
+    pub span: Span,
+    pub condition: Expression,
+    pub body: BlockStatement,
+
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LetStatement {
+    pub span: Span,
+    pub name: String,
+    pub explicit_type: ExplicitType,
+    pub expr: Expression,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReturnStatement {
+    pub span: Span,
+    pub expr: Expression,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WithStatement {
+    pub span: Span,
+    pub from: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportStatement {
+    pub span: Span,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Statement {
-    Program(Span, Vec<Statement>),
-    Define(Span, Definition),
-    Block(Span, Vec<Statement>),
-    If(Span, IfStatement),
-    Function(
-        Span,
-        String,
-        Vec<NamedParameter>,
-        Vec<Statement>,
-        ExplicitType,
-        bool,
-    ),
-    Expression(Span, Expression),
-    While(Span, Expression, Vec<Statement>, Span),
-    Declaration(Span, String, Expression),
-    Return(Span, Expression),
+    If(IfStatement),
+    Function(FunctionStatement),
+    Block(BlockStatement),
+    Expression(ExpressionStatement),
+    While(WhileStatement),
+    Let(LetStatement),
+    Return(ReturnStatement),
+    Import(ImportStatement),
 }
 
 impl IfStatement {
     pub fn new(
+        span: Span,
         cond: Expression,
         if_block: Vec<Statement>,
         if_span: Span,
@@ -50,6 +103,7 @@ impl IfStatement {
         else_span: Option<Span>,
     ) -> Self {
         Self {
+            span,
             cond,
             if_block,
             if_span,
@@ -70,75 +124,23 @@ impl NamedParameter {
 }
 
 impl Statement {
-    pub fn print(&self, indent: usize) {
+    pub fn as_import(&self) -> Option<ImportStatement> {
         match self.clone() {
-            Statement::Program(_, children) => {
-                util::print_indent(indent, "Program:".into());
-                for child in children.iter() {
-                    child.print(indent + 1);
-                }
-            }
-            Statement::Define(_, definition) => {
-                util::print_indent(indent, "Definition:".into());
-                definition.print(indent + 1);
-            }
-            Statement::Block(_, children) => {
-                util::print_indent(indent, "BlockStatement:".into());
-                for child in children.iter() {
-                    child.print(indent + 1);
-                }
-            }
-            Statement::If(_, stmt) => {
-                util::print_indent(indent, "IfStatement:".into());
-                util::print_indent(indent + 1, "Condition:".into());
-                stmt.cond.print(indent + 2);
-                util::print_indent(indent + 1, "IfBlock:".into());
-                for child in stmt.if_block.iter() {
-                    child.print(indent + 2);
-                }
-
-                if let Some(block) = stmt.else_block {
-                    util::print_indent(indent + 1, "ElseBlock:".into());
-                    for child in block.iter() {
-                        child.print(indent + 2);
-                    }
-                }
-            }
-            Statement::Function(_, name, parameters, children, defined, external) => {
-                util::print_indent(indent, "FunctionStatement:".into());
-                util::print_indent(indent + 1, "Name:".into());
-                util::print_indent(indent + 2, name);
-                util::print_indent(indent + 1, "Children:".into());
-                for child in children.iter() {
-                    child.print(indent + 2);
-                }
-                defined.print(indent + 1);
-            }
-            Statement::Expression(_, expr) => {
-                util::print_indent(indent, "ExpressionStatement:".into());
-                expr.print(indent + 1);
-            }
-            Statement::While(_, expr, children, _) => {
-                util::print_indent(indent, "WhileStatement:".into());
-                util::print_indent(indent + 1, "Expression:".into());
-                expr.print(indent + 2);
-                util::print_indent(indent + 1, "Body:".into());
-                for child in children.iter() {
-                    child.print(indent + 2);
-                }
-            }
-            Statement::Declaration(_, name, expr) => {
-                util::print_indent(indent, "DeclarationStatement:".into());
-
-                util::print_indent(indent + 1, "Name:".into());
-                util::print_indent(indent + 2, name.clone());
-                expr.print(indent + 1);
-            }
-            Statement::Return(_, expr) => {
-                util::print_indent(indent, "ReturnStatement:".into());
-                expr.print(indent + 1);
-            }
-            _ => {}
+            Statement::Import(import) => Some(import),
+            _ => None
         }
+    }
+
+    pub fn as_function(&self) -> Option<FunctionStatement> {
+        match self.clone() {
+            Statement::Function(function) => Some(function),
+            _ => None
+        }
+    }
+}
+
+impl BlockStatement {
+    pub fn is_empty(&self) -> bool {
+        0 >= self.statements.len()
     }
 }

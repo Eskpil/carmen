@@ -1,59 +1,89 @@
 mod ast;
 mod cil;
-mod codegen;
+// mod codegen;
 mod errors;
 mod lexer;
 mod parser;
 mod unescape;
 
+use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
+use std::path::PathBuf;
 use ast::statements::Statement;
-use codegen::Context;
 use lexer::{Lexer, Span};
 use parser::Parser;
-use crate::cil::TypeChecker;
+use crate::cil::Pipeline;
 
-fn main() {
-    let mut parser = Parser::new(
-        include_str!("../tests/print.cn").to_owned(),
-        "tests/print.cn".to_owned(),
-    );
+struct Compiler {
+    pub modules: Vec<ast::Module>,
+}
 
-    let mut children = Vec::<Statement>::new();
-
-    loop {
-        if parser.ended {
-            break;
-        }
-
-        match parser.parse_statement() {
-            Ok(statement) => children.push(statement),
-            Err(err) => {
-                if err.level == errors::Level::Ignore {
-                    continue;
-                } else {
-                    err.report();
-                }
-            }
+impl Compiler {
+    pub fn new() -> Compiler {
+        Compiler {
+            modules: vec![],
         }
     }
 
-    let typechecker = TypeChecker::new();
+    pub fn load_directory(&mut self, dir: String) {
+        let paths = fs::read_dir(dir).unwrap();
 
-    let program = Statement::Program(Span::default(), children);
-    program.print(0);
+        for path in paths {
+            let path = path.expect("something wrong");
+            if  path.path().extension().unwrap() != OsStr::new("cn") {
+                continue
+            }
 
-    let typechecked_program = typechecker.generate_cil(&program);
+            let filetype = path.file_type().expect("could not get filetype");
+            // TODO: Allow directories somehow
+            if !filetype.is_file() {
+                continue
+            }
 
-    let mut context = Context::new();
-    context.generate(&typechecked_program);
+            let filename_without_extension = path.path().file_stem().unwrap().to_str().unwrap().to_string();
+            self.modules.push(self.load_file(filename_without_extension, path.path()));
+        }
+    }
 
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .open("a.out")
-        .expect("failed to open file");
+    fn load_file(&self, module: String, path: PathBuf) -> ast::Module {
+        let mut parser = Parser::new(
+            fs::read_to_string(path.to_str().unwrap().to_string()).expect("could not read file"),
+            path.to_str().unwrap().to_string(),
+        );
 
-    file.write_all(&*context.build()).expect("could not write code to file")
+        let mut children = Vec::<Statement>::new();
+
+        loop {
+            if parser.ended {
+                break;
+            }
+
+            match parser.parse_statement() {
+                Ok(statement) => children.push(statement),
+                Err(err) => {
+                    if err.level == errors::Level::Ignore {
+                        continue;
+                    } else {
+                        err.report();
+                    }
+                }
+            }
+        }
+
+        ast::Module {
+            name: module,
+            statements: children,
+        }
+    }
+}
+
+fn main() {
+    let mut compiler = Compiler::new();
+
+    compiler.load_directory("./examples/hello_world".to_owned());
+
+    let mut pipeline = Pipeline::new();
+    pipeline.load(compiler.modules);
+    pipeline.run();
 }

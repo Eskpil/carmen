@@ -1,0 +1,7 @@
+extern fn exit(code: usize);
+
+let i: *i64;
+
+fn main() {
+    exit(code: 0);
+}

@@ -10,9 +10,6 @@ use crate::ast::{
         IfStatement,
     }, 
     definitions::{
-        StructDefinition, 
-        Definition, 
-        FieldDefinition,
         ExplicitType
     }
 };
@@ -20,6 +17,9 @@ use crate::lexer::{Lexer, Token, TokenKind, Span};
 use crate::errors::{OceanError, Level, Step};
 use crate::unescape::{unescape};
 use std::iter::Peekable;
+use std::process::id;
+use crate::ast::expressions::{BinaryExpression, BooleanExpression, CallExpression, EmptyExpression, LiteralExpression, StringLiteralExpression, UnaryExpression, IdentifierExpression, LookupExpression};
+use crate::ast::statements::{BlockStatement, ExpressionStatement, FunctionStatement, ImportStatement, LetStatement, ReturnStatement, WhileStatement, WithStatement};
 
 type SyntaxResult<T> = Result<T, OceanError>;
 type ParseResult<T> = Result<T, OceanError>;
@@ -28,6 +28,8 @@ pub struct Parser {
     lexer: Peekable<Lexer>,
     file_name: String,
     input: String,
+
+    in_function: bool,
 
     pub ended: bool,
 }
@@ -78,6 +80,8 @@ impl Parser {
             lexer: Lexer::new(input.clone(), file_name.clone()).peekable(),
             file_name: file_name.clone(),
             input: input.clone(),
+
+            in_function: false,
 
             ended: false,
         } 
@@ -158,10 +162,23 @@ impl Parser {
     pub fn parse_identifier(&mut self, lhs: Token) -> ParseResult<Expression> {
         if self.peek() == TokenKind::Dot {
             self.consume(TokenKind::Dot)?;
-            let rhs = self.consume_next(TokenKind::Identifier)?;
-            Ok(Expression::Lookup(lhs.span.clone(), lhs.value.clone(), rhs.value.clone()))
+            let identifier = self.consume_next(TokenKind::Identifier)?;
+
+            let mut lookup = LookupExpression {
+                span: identifier.span.clone(),
+                name: lhs.value.clone(),
+                child: Some(Box::new(self.parse_identifier(identifier)?.as_lookup().unwrap())),
+            };
+
+            if self.peek() == TokenKind::Dot {
+                self.consume(TokenKind::Dot)?;
+                let lhs = self.consume_next(TokenKind::Identifier)?;
+                lookup.child = Some(Box::new(self.parse_identifier(lhs)?.as_lookup().unwrap()));
+            }
+
+            Ok(Expression::Lookup(lookup))
         } else {
-            Ok(Expression::Identifier(lhs.span.clone(), lhs.value.clone()))
+            Ok(Expression::Lookup(LookupExpression { span: lhs.span, name: lhs.value.clone(), child: None}))
         }
     }
 
@@ -169,39 +186,19 @@ impl Parser {
         let token = self.next_token()?;
         
         let literal = match lit {
-            TokenKind::Literal => Expression::Literal(token.span, token.value.parse::<u64>().unwrap()), 
-            TokenKind::True => Expression::Bool(token.span, true),
-            TokenKind::False => Expression::Bool(token.span, false),
+            TokenKind::Literal => Expression::Literal(LiteralExpression { span: token.span, val: token.value.parse::<u64>().unwrap()}),
+            TokenKind::True => Expression::Bool(BooleanExpression { span: token.span, val: true }),
+            TokenKind::False => Expression::Bool(BooleanExpression { span: token.span, val: false}),
             TokenKind::Identifier => self.parse_identifier(token.clone())?,
             TokenKind::StringLiteral => { 
                 let value = token.value.clone();
                 let unescaped = unescape(&value).unwrap();
-                Expression::StringLiteral(token.span, unescaped)
+                Expression::StringLiteral(StringLiteralExpression { span: token.span, val: unescaped})
             },
             token => unimplemented!("Error handeling or token: {:?}", token)
         };
 
         Ok(literal)
-    }
-
-    pub fn parse_array(&mut self) -> ParseResult<Expression> {
-        let start = self.consume_next(TokenKind::LeftBracket)?;  
-        let mut arguments = Vec::<Expression>::new();
-
-        while self.peek() != TokenKind::RightBracket {
-            let expr = self.parse_expression(0, None)?; 
-            arguments.push(expr);
-            if !self.at(TokenKind::Comma) {
-                break;
-            } else {
-                self.consume(TokenKind::Comma)?;
-            }
-        }
-
-        self.consume(TokenKind::RightBracket)?;
-
-        let expr = Expression::ArrayInit(start.span, arguments);
-        Ok(expr)
     }
 
     pub fn parse_expression(&mut self, binding_power: u8, provided_lhs: Option<Expression>) -> ParseResult<Expression> {
@@ -214,27 +211,15 @@ impl Parser {
                         | lit @ TokenKind::Identifier
                         | lit @ TokenKind::True
                         | lit @ TokenKind::False => self.parse_literal(lit)?,
-                    TokenKind::LeftBracket => {
-                        self.parse_array()?
-                    }
                     _ => {
                         let token = self.next_token()?;
                         return Err(
-                            OceanError::new(
-                                Level::Error, 
-                                Step::Parsing, 
-                                token.span, 
-                                format!("Unexpected token: \x1b[1m{}\x1b[0m. Expected \x1b[1mExpression\x1b[0m.", token.kind.to_string())
-                            )
+                            OceanError::new(Level::Error, Step::Parsing, token.span, format!("Unexpected token: \x1b[1m{}\x1b[0m. Expected \x1b[1mExpression\x1b[0m.", token.kind.to_string()))
                         );
                     }
                 }
             }
-        }; 
-
-        if self.at(TokenKind::LeftBracket) {
-            return self.parse_left_bracket_begin(lhs);
-        }
+        };
 
         if self.at(TokenKind::LeftParen) {
             return self.parse_function_call(lhs);
@@ -289,8 +274,7 @@ impl Parser {
                 }
 
                 let op_token = self.consume_next(op)?;
-
-                lhs = Expression::Unary(op_token.span.clone(), BinaryOp::from_token_kind(&op), Box::new(lhs));
+                lhs = Expression::Unary(UnaryExpression { span: op_token.span.clone(), op: BinaryOp::from_token_kind(&op), expr: Box::new(lhs )});
                 // parsed an operator --> go round the loop again
                 continue;
             }
@@ -305,7 +289,7 @@ impl Parser {
                 self.consume(op)?;
 
                 let rhs = self.parse_expression(right_binding_power, None)?;
-                lhs = Expression::Binary(lhs.span(), BinaryOp::from_token_kind(&op), Box::new(lhs), Box::new(rhs));
+                lhs = Expression::Binary(BinaryExpression { span: lhs.span(), op: BinaryOp::from_token_kind(&op), lhs: Box::new(lhs), rhs: Box::new(rhs)});
 
                 // parsed an operator --> go round the loop again
                 continue;
@@ -314,62 +298,6 @@ impl Parser {
         }
 
         Ok(lhs)
-    }
-
-    pub fn parse_left_bracket_begin(
-        &mut self,
-        lhs: Expression,
-    ) -> ParseResult<Expression> {
-        let start = self.consume_next(TokenKind::LeftBracket)?; 
-
-        match self.peek() {
-            TokenKind::Literal => self.parse_array_index(lhs, start.span),
-            TokenKind::Identifier => self.parse_struct_init(lhs, start.span),
-            _ => todo!("Error")
-        }
-    }
-
-    pub fn parse_array_index(
-        &mut self,
-        lhs: Expression,
-        start: Span,
-    ) -> ParseResult<Expression> {
-        let index = self.consume_next(TokenKind::Literal)?
-            .value.parse::<u64>()
-            .unwrap(); 
-
-        self.consume(TokenKind::RightBracket)?;
-
-        let expr = Expression::ArrayIndex(start.clone(), lhs.as_identifier(), index);
-
-        Ok(expr)
-    }
-
-    pub fn parse_struct_init(
-        &mut self, 
-        lhs: Expression, 
-        start: Span
-    ) -> ParseResult<Expression> {
-        let mut arguments = Vec::<NamedArgument>::new();
-        while !self.at(TokenKind::RightBracket) {
-            let name_token = self.consume_next(TokenKind::Identifier)?;
-            let name = name_token.value.clone();
-            self.consume(TokenKind::Colon)?;
-
-            let expr = self.parse_expression(0, None)?; 
-            let argument = NamedArgument::new(name, expr, name_token.span);
-
-            arguments.push(argument);
-            
-            if !self.at(TokenKind::Comma) {
-                break;
-            } else {
-                self.consume(TokenKind::Comma)?;
-            }
-        }
-        self.consume(TokenKind::RightBracket)?;
-        let expr = Expression::StructInit(start.clone(), lhs.as_identifier(), arguments);  
-        Ok(expr)
     }
 
     pub fn parse_function_call(&mut self, lhs: Expression) -> ParseResult<Expression> {
@@ -393,11 +321,9 @@ impl Parser {
         }
         self.consume(TokenKind::RightParen)?;
 
-        let name = lhs.as_identifier();
+        let name = lhs.as_lookup().expect("not lookup");
 
-        let expr = Expression::Call(start.span, name, arguments);
-
-        Ok(expr)
+        Ok(Expression::Call(CallExpression { span: start.span, name, arguments }))
     }
 
     pub fn parse_block_body(&mut self) -> ParseResult<(Span, Vec<Statement>)> {
@@ -417,7 +343,7 @@ impl Parser {
                 body.push(self.parse_statement()?);  
             } else {
                 let expr = self.parse_expression(0, None)?;
-                let stmt = Statement::Expression(expr.span(), expr);
+                let stmt = Statement::Expression(ExpressionStatement { span: expr.span(), expr });
                 body.push(stmt);
             }
 
@@ -435,23 +361,31 @@ impl Parser {
     
     pub fn parse_block(&mut self) -> ParseResult<Statement> {
         let (span, body) = self.parse_block_body()?;    
-        let stmt = Statement::Block(span, body);
-
-        Ok(stmt)
+        Ok(Statement::Block(BlockStatement { span, statements: body }))
     }
 
     pub fn parse_let_statement(&mut self) -> ParseResult<Statement> {
         let start = self.consume_next(TokenKind::Let)?;
         let ident_token = self.consume_next(TokenKind::Identifier)?;
         let ident = ident_token.value.clone();
-        let mut expr = Expression::Empty(ident_token.span);
+        let mut expr = Expression::Empty(EmptyExpression { span: ident_token.span, });
+        let mut typ = ExplicitType::Empty;
+
+        if self.at(TokenKind::Colon) {
+            self.consume(TokenKind::Colon)?;
+            typ = self.parse_defined_type()?;
+        }
 
         if self.at(TokenKind::Assignment) {
             self.consume(TokenKind::Assignment)?;
             expr = self.parse_expression(0, None)?;
         }
 
-        return Ok(Statement::Declaration(start.span.clone(), ident, expr));
+        if !self.in_function && self.at(TokenKind::Semicolon){
+            self.consume(TokenKind::Semicolon)?;
+        }
+
+        Ok(Statement::Let(LetStatement { span: start.span, name: ident, expr, explicit_type: typ }))
     }
 
     pub fn parse_if_statement(&mut self) -> ParseResult<Statement> {
@@ -470,6 +404,7 @@ impl Parser {
         }
 
         let x = IfStatement::new(
+            start.span,
             cond, 
             if_block, 
             if_span, 
@@ -477,7 +412,7 @@ impl Parser {
             else_span
         );
 
-        let stmt = Statement::If(start.span.clone(), x);
+       let stmt = Statement::If(x);
 
         return Ok(stmt);
     }
@@ -489,45 +424,7 @@ impl Parser {
         
         let (span, body) = self.parse_block_body()?;
         
-        let stmt = Statement::While(start.span.clone(), expr, body, span);
-
-        Ok(stmt)
-    }
-
-    pub fn parse_definition(&mut self) -> ParseResult<Statement> {
-        let start = self.consume_next(TokenKind::Struct)?;
-        let struct_name = self.consume_next(TokenKind::Identifier)?.value.clone();
-        let mut fields = Vec::<FieldDefinition>::new();
-        self.consume(TokenKind::LeftCurly)?;
-
-        while !self.at(TokenKind::RightCurly) {
-            let field_name = self.consume_next(TokenKind::Identifier)?.value.clone();  
-            self.consume(TokenKind::Colon)?;
-
-            let mut defined_type: Option<ExplicitType> = None;
-            let field_type = self.consume_next(TokenKind::Identifier)?.value.clone();
-             
-
-            if self.peek() == TokenKind::Less {
-                self.consume(TokenKind::Less)?; 
-                let has_field = self.consume_next(TokenKind::Identifier)?.value.clone();
-                self.consume(TokenKind::Greater)?;
-
-                defined_type = Some(ExplicitType::Array(Box::new(ExplicitType::name(has_field))));
-            } else {
-                defined_type = Some(ExplicitType::Name(field_type));
-            } 
-
-            let field = FieldDefinition::new(field_name, defined_type.unwrap());
-            fields.push(field);
-        }
-
-        self.consume(TokenKind::RightCurly)?;
-
-        let struct_definition = StructDefinition::new(struct_name, fields);
-        let definition = Definition::Struct(struct_definition);
-        let stmt = Statement::Define(start.span, definition);
-
+        let stmt = Statement::While(WhileStatement { span: start.span, condition: expr, body: BlockStatement { span, statements: body }});
         Ok(stmt)
     }
 
@@ -549,10 +446,12 @@ impl Parser {
         self.consume(TokenKind::Return)?; 
         let expr = self.parse_expression(0, None)?;
 
-        Ok(Statement::Return(expr.span(), expr))
+        Ok(Statement::Return(ReturnStatement { span: expr.span(), expr }))
     }
 
     pub fn parse_function(&mut self, external: bool) -> ParseResult<Statement> {
+        self.in_function =true;
+
         let start = self.consume_next(TokenKind::Function)?; 
         let name = self.consume_next(TokenKind::Identifier)?.value.clone();
         let mut parameters = Vec::<NamedParameter>::new();
@@ -584,12 +483,13 @@ impl Parser {
             returning = self.parse_defined_type()?;
         }
 
+        let mut span = Span::default();
         let mut body: Vec<Statement> = vec![];
 
         if self.peek() == TokenKind::Semicolon {
             self.consume(TokenKind::Semicolon)?;   
         } else if self.peek() == TokenKind::LeftCurly {
-            (_, body) = self.parse_block_body()?;
+            (span, body) = self.parse_block_body()?;
         } else {
             return Err(
                 OceanError::new(
@@ -605,24 +505,39 @@ impl Parser {
                 )   
             );           
         }
-        
-        let function = Statement::Function(
-            start.span.clone(),
-            name, 
-            parameters, 
-            body, 
-            returning,
-            external
-        );
+
+        let function = Statement::Function(FunctionStatement {
+            span: start.span,
+            name,
+            parameters,
+            block: BlockStatement {
+                span: span.clone(),
+                statements: body.clone(),
+            },
+            return_type: returning,
+            external,
+        });
+        self.in_function = false;
 
         Ok(function)
+    }
+
+    pub fn parse_import_statement(&mut self) -> ParseResult<Statement> {
+        let start = self.consume_next(TokenKind::Import)?;
+
+        let name = self.consume_next(TokenKind::StringLiteral)?.value.clone();
+        self.consume(TokenKind::Semicolon)?;
+
+        Ok(Statement::Import(ImportStatement {
+            span: start.span,
+            name,
+        }))
     }
 
     pub fn parse_statement(&mut self) -> ParseResult<Statement> {
         match self.peek() {
             TokenKind::Let => self.parse_let_statement(),
             TokenKind::LeftCurly => self.parse_block(),
-            TokenKind::Struct => self.parse_definition(),
             TokenKind::Function => self.parse_function(false),
             TokenKind::If => self.parse_if_statement(),
             TokenKind::While => self.parse_while_loop(),
@@ -633,10 +548,11 @@ impl Parser {
             }
             TokenKind::Literal => {
                 let expr = self.parse_expression(0, None)?;
-                let stmt = Statement::Expression(expr.span(), expr);
+                let stmt = Statement::Expression(ExpressionStatement { span: expr.span(), expr });
                 Ok(stmt)
             }
-            TokenKind::Eof => { 
+            TokenKind::Import => self.parse_import_statement(),
+            TokenKind::Eof => {
                 let token = self.consume_next(TokenKind::Eof)?;
                 self.ended = true;
                 Err(OceanError::new(Level::Ignore, Step::Parsing, token.span, "EofENDEof".into()))
