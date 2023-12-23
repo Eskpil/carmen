@@ -7,7 +7,7 @@ use std::ops::Index;
 use rand::distributions::{Alphanumeric, DistString};
 use crate::ast;
 use crate::ast::definitions::ExplicitType;
-use crate::cil::common::{Stage, Tag};
+use crate::cil::common::{expand_tags, Stage, Tag};
 use crate::cil::typecheck::runtime::Runtime;
 use crate::cil::typecheck::type_id::{aliases, Primitive, TypeId, TypePool};
 use crate::cil::typecheck::typechecked_ast::{BinaryExpression, Block, BooleanExpression, CallExpression, DataDeclaration, Declaration, DeclareVariableStatement, DefineVariableStatement, Expression, ExpressionStatement, FunctionDeclaration, FunctionDefinition, LiteralExpression, Module, ModuleName, ReturnStatement, Signature, Statement, UseDataExpression, VariableLookupExpression, WhileStatement};
@@ -304,11 +304,7 @@ impl TypeChecker {
             returns = type_id;
         }
 
-        let mut tags = vec![];
-
-        if function.external {
-            tags.push(Tag::NoMangle);
-        }
+        let tags = expand_tags(&function.tags);
 
         FunctionDeclaration {
             name: ModuleName {

@@ -2,7 +2,7 @@ use crate::ast;
 
 pub mod typecheck;
 pub mod compressed;
-mod common;
+pub mod common;
 
 pub struct Pipeline {
     modules: Vec<ast::Module>,

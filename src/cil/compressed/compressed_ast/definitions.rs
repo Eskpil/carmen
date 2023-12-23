@@ -1,4 +1,5 @@
 use crate::ast::BinaryOp;
+use crate::cil::common::Tags;
 use crate::cil::compressed::compressed_ast;
 use crate::cil::compressed::compressed_ast::{Signature, Type};
 use crate::cil::typecheck::typechecked_ast::ModuleName;
@@ -98,6 +99,7 @@ pub struct FunctionDeclaration {
     pub name: Name,
     pub module_name: ModuleName,
     pub signature: Signature,
+    pub tags: Tags,
 }
 
 #[derive(Debug, Clone)]

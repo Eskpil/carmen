@@ -19,9 +19,15 @@ use crate::unescape::{unescape};
 use std::iter::Peekable;
 use crate::ast::expressions::{BinaryExpression, BooleanExpression, CallExpression, EmptyExpression, LiteralExpression, StringLiteralExpression, UnaryExpression, LookupExpression};
 use crate::ast::statements::{BlockStatement, DefineStatement, ExpressionStatement, FunctionStatement, ImportStatement, LetStatement, ReturnStatement, WhileStatement};
+use crate::cil;
+use crate::cil::common::{Tags};
 
 type SyntaxResult<T> = Result<T, OceanError>;
 type ParseResult<T> = Result<T, OceanError>;
+
+pub struct TagContext {
+    pub tags: Tags,
+}
 
 pub struct Parser {
     lexer: Peekable<Lexer>,
@@ -31,6 +37,8 @@ pub struct Parser {
     in_function: bool,
 
     pub ended: bool,
+
+    tag_context: Option<TagContext>
 }
 
 /* Credit to https://domenicquirl.github.io/blog/parsing-basics/#binary-operators */
@@ -83,6 +91,8 @@ impl Parser {
             in_function: false,
 
             ended: false,
+
+            tag_context: None,
         } 
     }
 
@@ -503,6 +513,12 @@ impl Parser {
             );           
         }
 
+        let mut tags = cil::common::default_function_tags();
+        if self.tag_context.is_some() {
+            tags =self.tag_context.as_ref().unwrap().tags.clone();
+            self.tag_context = None;
+        }
+
         let function = Statement::Function(FunctionStatement {
             span: start.span,
             name,
@@ -513,6 +529,7 @@ impl Parser {
             },
             return_type: returning,
             external,
+            tags,
         });
         self.in_function = false;
 
@@ -551,7 +568,36 @@ impl Parser {
         }))
     }
 
+    pub fn parse_tags(&mut self) -> ParseResult<()> {
+        if self.peek() != TokenKind::HashTag {
+            return Ok(());
+        }
+        let start = self.consume_next(TokenKind::HashTag)?.span;
+        let _ = self.consume_next(TokenKind::LeftParen)?;
+
+        let mut tags = vec![];
+
+        while !self.at(TokenKind::RightParen) {
+            let name = self.consume_next(TokenKind::Identifier)?;
+            tags.push(name.value.into());
+
+            if self.at(TokenKind::Comma) {
+                let _ = self.consume_next(TokenKind::Comma)?;
+            }
+        }
+        let end = self.consume_next(TokenKind::RightParen);
+
+        self.tag_context = Some(TagContext {
+            tags,
+        });
+
+        Ok(())
+    }
+
+
     pub fn parse_statement(&mut self) -> ParseResult<Statement> {
+        self.parse_tags()?;
+
         match self.peek() {
             TokenKind::Let => self.parse_let_statement(),
             TokenKind::LeftCurly => self.parse_block(),

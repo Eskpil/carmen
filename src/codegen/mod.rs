@@ -1,4 +1,4 @@
-use cranelift_codegen::ir::{types::*, ExtFuncData, ExternalName, Function, UserExternalName, UserFuncName, Value, Block};
+use cranelift_codegen::ir::{types::*, ExtFuncData, ExternalName, Function, UserExternalName, UserFuncName, Value, Block, InstBuilderBase};
 use cranelift_codegen::ir::{AbiParam, InstBuilder, Signature};
 use cranelift_codegen::isa::{lookup};
 use cranelift_codegen::settings;
@@ -11,12 +11,14 @@ use std::collections::HashMap;
 use cranelift_codegen::ir::condcodes::IntCC;
 
 use crate::ast::BinaryOp;
+use crate::cil::common::{Tag, Tags};
 use crate::cil::compressed::compressed_ast;
 
 #[derive(Clone)]
 struct FuncIdEntry {
     id: FuncId,
     sig: Signature,
+    colocated: bool,
 }
 
 pub struct Context {
@@ -63,7 +65,7 @@ impl Context {
         // Set up a Cranelift context, a compilation setting, and a module.
         let triple = Triple {
             architecture: Architecture::X86_64,
-            vendor: Vendor::Unknown,
+            vendor: Vendor::Amd,
             operating_system: OperatingSystem::Linux,
             binary_format: BinaryFormat::Elf,
             environment: Environment::Gnu,
@@ -98,18 +100,36 @@ impl Context {
         }
     }
 
+    pub fn determine_function_linkage(tags: &Tags) -> Linkage {
+        if tags.contains(&Tag::Imported) {
+            return Linkage::Import;
+        }
+
+        if tags.contains(&Tag::External) {
+            return Linkage::Export;
+        }
+
+        Linkage::Local
+    }
 
     pub fn generate_function_declaration(&mut self, declaration: &compressed_ast::FunctionDeclaration) {
         let mut sig = self.module.make_signature();
         convert_signature(&mut sig, &declaration.signature);
 
-        let func_id = self.module.declare_function(&declaration.name, Linkage::Export, &sig).expect("could not declare function");
+        let linkage = Context::determine_function_linkage(&declaration.tags);
+        let func_id = self.module.declare_function(&declaration.name, linkage, &sig).expect("could not declare function");
 
-        println!("function: {}@{:?}", declaration.name, sig);
+        println!("function: {}@{:?}", declaration.name, linkage);
+
+        let mut colocated = true;
+        if linkage == Linkage::Import {
+            colocated =false;
+        }
 
         self.func_id_cache.insert(declaration.name.clone(), FuncIdEntry {
             id: func_id,
             sig,
+            colocated,
         });
     }
 
@@ -227,7 +247,7 @@ impl Context {
                 let func_ref = builder.import_function(ExtFuncData {
                     name: ExternalName::User(func_external_name),
                     signature: func_sig_ref,
-                    colocated: true,
+                    colocated: func_entry.colocated,
                 });
 
                 let mut arguments = Vec::<Value>::new();
@@ -280,7 +300,13 @@ impl Context {
                 let body_block = builder.create_block();
                 let end_block = builder.create_block();
 
+                // If the while statement is the first statement in a block cranelift will complain that we can not
+                // switch to another block before filling the previous. Cranelift did not tolerate a nop so we introduce
+                // a redundant jump to the condition block. This should be solved some other way. This could be solved
+                // by determining if the parent_block has been filled. If not, just use the parent block for the
+                // condition.
                 builder.ins().jump(cond_block, &[]);
+
                 builder.switch_to_block(cond_block);
                 {
                     let res = self.generate_expression(&lo.cond, builder);
@@ -301,12 +327,6 @@ impl Context {
                 builder.seal_block(end_block);
                 builder.seal_block(cond_block);
                 builder.seal_block(body_block);
-
-                println!("current: {} parent: {}", builder.current_block().unwrap(), parent_block);
-
-                // builder.switch_to_block(parent_block);
-
-                println!("made loop statement");
             }
         }
     }
@@ -339,7 +359,6 @@ impl Context {
         }
 
         for stmt in &block.body {
-            println!("making statement: {:?}", stmt);
             self.generate_statement(stmt, ir_block, builder);
         }
 
@@ -349,8 +368,6 @@ impl Context {
         // inefficient, i do not care. Borrow checker got me tired.
         let cache = self.func_id_cache.clone();
         let entry = cache.get(&*definition.for_declaration).expect("could not find entry");
-
-        println!("generating definition for {}", definition.for_declaration);
 
         let mut func = Function::with_name_signature(UserFuncName::user(0, entry.id.as_u32()), entry.sig.clone());
 

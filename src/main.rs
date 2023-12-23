@@ -77,24 +77,38 @@ impl Compiler {
             statements: children,
         }
     }
+
+    pub fn compile(&mut self) {
+        let mut pipeline = Pipeline::new();
+        pipeline.load(self.modules.clone());
+
+        let mut gen = codegen::Context::new();
+        gen.generate(&pipeline.run());
+
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open("a.out")
+            .expect("failed to open file");
+
+        file.write_all(&gen.build()).expect("could not write code to file");
+
+        let output = std::process::Command::new("clang").
+            arg("-o").
+            arg("bin").
+            arg("a.out").
+            output();
+
+        println!("exec: {:?}", String::from_utf8_lossy(&output.unwrap().stderr));
+    }
 }
 
 fn main() {
     let mut compiler = Compiler::new();
 
     compiler.load_directory("./examples/hello_world".to_owned());
+    compiler.compile();
 
-    let mut pipeline = Pipeline::new();
-    pipeline.load(compiler.modules);
 
-    let mut gen = codegen::Context::new();
-    gen.generate(&pipeline.run());
 
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .open("a.out")
-        .expect("failed to open file");
-
-    file.write_all(&gen.build()).expect("could not write code to file")
 }

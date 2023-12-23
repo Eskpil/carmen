@@ -129,6 +129,7 @@ impl Compressor {
             name: mangled_name,
             module_name: typechecked_function.name.clone(),
             signature,
+            tags: typechecked_function.tags.clone(),
         }
     }
 

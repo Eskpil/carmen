@@ -3,6 +3,7 @@ use super::expressions::{Expression, LookupExpression};
 use crate::lexer::Span;
 
 use serde::{Deserialize, Serialize};
+use crate::cil::common::Tags;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IfStatement {
@@ -38,6 +39,7 @@ pub struct FunctionStatement {
     pub block: BlockStatement,
     pub return_type: ExplicitType,
     pub external: bool,
+    pub tags: Tags,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

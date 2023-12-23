@@ -59,6 +59,8 @@ pub enum TokenKind {
     LeftCurly,
     RightCurly,
 
+    HashTag,
+
     Eof,
 }
 
@@ -144,6 +146,8 @@ impl fmt::Display for TokenKind {
 
             TokenKind::RightCurly => "}".into(),
             TokenKind::LeftCurly => "{".into(),
+
+            TokenKind::HashTag => "#".into(),
 
             TokenKind::Eof => "eof".into(),
         };
@@ -472,6 +476,12 @@ impl Iterator for Lexer {
             '*' => {
                 let span = self.span();
                 let token = Token::kind_span(TokenKind::Mul, span);
+                self.advance();
+                Some(token)
+            }
+            '#' => {
+                let span = self.span();
+                let token = Token::kind_span(TokenKind::HashTag, span);
                 self.advance();
                 Some(token)
             }
