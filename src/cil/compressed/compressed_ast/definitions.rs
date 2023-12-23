@@ -67,11 +67,18 @@ pub struct ExpressionStatement {
 }
 
 #[derive(Debug, Clone)]
+pub struct LoopStatement {
+    pub cond: Expression,
+    pub block: Block,
+}
+
+#[derive(Debug, Clone)]
 pub enum Statement {
     DeclareVariable(DeclareVariableStatement),
     DefineVariable(DefineVariableStatement),
     Return(ReturnStatement),
     Expression(ExpressionStatement),
+    Loop(LoopStatement),
 }
 
 #[derive(Debug, Clone)]

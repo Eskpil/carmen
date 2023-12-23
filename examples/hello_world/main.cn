@@ -1,11 +1,9 @@
 import "io";
 
-fn add(a: usize, b: usize) -> usize {
-    return a + b;
-}
-
 fn main() -> usize {
-  add(a: 69, b: 420);
+  while true {
+    io.print(message: "Hello\n");
+  };
 
-  return io.print(buf: "Hello, World\n");
+  return 0;
 }

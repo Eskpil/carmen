@@ -10,7 +10,7 @@ use crate::ast::definitions::ExplicitType;
 use crate::cil::common::{Stage, Tag};
 use crate::cil::typecheck::runtime::Runtime;
 use crate::cil::typecheck::type_id::{aliases, Primitive, TypeId, TypePool};
-use crate::cil::typecheck::typechecked_ast::{BinaryExpression, Block, CallExpression, DataDeclaration, Declaration, DeclareVariableStatement, DefineVariableStatement, Expression, ExpressionStatement, FunctionDeclaration, FunctionDefinition, LiteralExpression, Module, ModuleName, ReturnStatement, Signature, Statement, UseDataExpression, VariableLookupExpression};
+use crate::cil::typecheck::typechecked_ast::{BinaryExpression, Block, BooleanExpression, CallExpression, DataDeclaration, Declaration, DeclareVariableStatement, DefineVariableStatement, Expression, ExpressionStatement, FunctionDeclaration, FunctionDefinition, LiteralExpression, Module, ModuleName, ReturnStatement, Signature, Statement, UseDataExpression, VariableLookupExpression, WhileStatement};
 
 pub type ModuleId = u32;
 
@@ -161,11 +161,19 @@ impl TypeChecker {
                 decl.signature.returns.clone()
             }
             // TODO: Support U8 literals as well.
-            Expression::Binary(_) => self.type_pool.find_alias(aliases::USIZE).unwrap(),
+            Expression::Binary(bin) => {
+                if bin.op.returns_bool() {
+                    self.type_pool.find_primitive(&Primitive::Bool).expect("no bool?!??")
+                } else {
+                    self.type_pool.find_alias(aliases::USIZE).unwrap()
+                }
+
+            },
             Expression::VariableLookup(var) => {
                 var.variable.typ.clone()
             }
             Expression::UseData(_) => self.type_pool.find_pointer(self.type_pool.find("u8".to_string()).unwrap()).unwrap(),
+            Expression::Bool(_) => self.type_pool.find_primitive(&Primitive::Bool).expect("no bool?!??"),
         }
     }
 
@@ -264,6 +272,11 @@ impl TypeChecker {
 
                 Expression::Binary(BinaryExpression { op: binary.op, lhs: Box::new(lhs), rhs: Box::new(rhs) })
             }
+            ast::expressions::Expression::Bool(b) => {
+                Expression::Bool(BooleanExpression {
+                    value: b.val,
+                })
+            }
 
             e => todo!("implement: {:?}", e)
         }
@@ -360,7 +373,34 @@ impl TypeChecker {
                     let expr =self.typecheck_expression(&expr.expr, module);
                     vec![Statement::Expression(ExpressionStatement(expr))]
                 }
+                ast::statements::Statement::While(w) => {
+                    let cond = self.typecheck_expression(&w.condition, module);
+                    println!("cond: {:?}", cond);
+                    if self.expression_returns(&cond, module) != self.type_pool.find_primitive(&Primitive::Bool).expect("no bool?") {
+                        todo!("throw no bool error");
+                    }
 
+                    let block = self.typecheck_block(&w.body, module);
+                    vec![Statement::While(WhileStatement {
+                        cond,
+                        block,
+                    })]
+                }
+                ast::statements::Statement::Define(define) => {
+                    // TODO: This will be different with structs.
+                    let name = define.name.name.clone();
+                    let expr = self.typecheck_expression(&define.expr, module);
+
+                    let variable = self.lookup_variable(name);
+                    if variable.is_none() {
+                        todo!("throw variable not found error");
+                    }
+
+                    vec![Statement::DefineVariable(DefineVariableStatement {
+                        variable: variable.unwrap(),
+                        expr,
+                    })]
+                }
                 s => todo!("implement s: {:?}", s)
             };
 

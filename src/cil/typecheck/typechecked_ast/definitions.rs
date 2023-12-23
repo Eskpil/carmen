@@ -59,12 +59,18 @@ pub struct UseDataExpression {
 }
 
 #[derive(Debug, Clone)]
+pub struct BooleanExpression {
+    pub value: bool,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expression {
     Literal(LiteralExpression),
     Binary(BinaryExpression),
     Call(CallExpression),
     VariableLookup(VariableLookupExpression),
     UseData(UseDataExpression),
+    Bool(BooleanExpression),
 }
 
 #[derive(Debug, Clone)]
@@ -86,6 +92,11 @@ pub struct DefineVariableStatement {
 #[derive(Debug, Clone)]
 pub struct ExpressionStatement(pub Expression);
 
+#[derive(Debug, Clone)]
+pub struct WhileStatement {
+    pub cond: Expression,
+    pub block: Block,
+}
 
 #[derive(Debug, Clone)]
 pub enum Statement {
@@ -93,6 +104,7 @@ pub enum Statement {
     DeclareVariable(DeclareVariableStatement),
     DefineVariable(DefineVariableStatement),
     Expression(ExpressionStatement),
+    While(WhileStatement)
 }
 
 #[derive(Debug, Clone)]

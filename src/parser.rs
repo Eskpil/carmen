@@ -18,7 +18,7 @@ use crate::errors::{OceanError, Level, Step};
 use crate::unescape::{unescape};
 use std::iter::Peekable;
 use crate::ast::expressions::{BinaryExpression, BooleanExpression, CallExpression, EmptyExpression, LiteralExpression, StringLiteralExpression, UnaryExpression, LookupExpression};
-use crate::ast::statements::{BlockStatement, ExpressionStatement, FunctionStatement, ImportStatement, LetStatement, ReturnStatement, WhileStatement};
+use crate::ast::statements::{BlockStatement, DefineStatement, ExpressionStatement, FunctionStatement, ImportStatement, LetStatement, ReturnStatement, WhileStatement};
 
 type SyntaxResult<T> = Result<T, OceanError>;
 type ParseResult<T> = Result<T, OceanError>;
@@ -338,6 +338,7 @@ impl Parser {
                 TokenKind::LeftCurly,
                 TokenKind::Return,
                 TokenKind::Extern,
+                TokenKind::Identifier,
             ]) {
                 body.push(self.parse_statement()?);  
             } else {
@@ -418,9 +419,8 @@ impl Parser {
         let start = self.consume_next(TokenKind::While)?;
         
         let expr = self.parse_expression(0, None)?;
-        
         let (span, body) = self.parse_block_body()?;
-        
+
         let stmt = Statement::While(WhileStatement { span: start.span, condition: expr, body: BlockStatement { span, statements: body }});
         Ok(stmt)
     }
@@ -531,6 +531,26 @@ impl Parser {
         }))
     }
 
+    pub fn parse_definition_statement(&mut self) -> ParseResult<Statement> {
+        let name = self.consume_next(TokenKind::Identifier)?;
+        let name = self.parse_identifier(name)?;
+        if self.peek() == TokenKind::LeftParen {
+            let expr =self.parse_function_call(name)?;
+            return Ok(Statement::Expression(ExpressionStatement {
+                span: expr.span(),
+                expr
+            }));
+        }
+
+        assert!(name.as_lookup().is_some());
+        let _ = self.consume_next(TokenKind::Assignment);
+        let expr = self.parse_expression(0, None)?;
+        Ok(Statement::Define(DefineStatement {
+            name: name.as_lookup().unwrap(),
+            expr,
+        }))
+    }
+
     pub fn parse_statement(&mut self) -> ParseResult<Statement> {
         match self.peek() {
             TokenKind::Let => self.parse_let_statement(),
@@ -548,6 +568,7 @@ impl Parser {
                 let stmt = Statement::Expression(ExpressionStatement { span: expr.span(), expr });
                 Ok(stmt)
             }
+            TokenKind::Identifier => self.parse_definition_statement(),
             TokenKind::Import => self.parse_import_statement(),
             TokenKind::Eof => {
                 let token = self.consume_next(TokenKind::Eof)?;

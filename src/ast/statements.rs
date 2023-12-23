@@ -1,5 +1,5 @@
 use super::definitions::{ExplicitType};
-use super::expressions::Expression;
+use super::expressions::{Expression, LookupExpression};
 use crate::lexer::Span;
 
 use serde::{Deserialize, Serialize};
@@ -81,6 +81,12 @@ pub struct ImportStatement {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DefineStatement {
+    pub name: LookupExpression,
+    pub expr: Expression,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Statement {
     If(IfStatement),
     Function(FunctionStatement),
@@ -90,6 +96,7 @@ pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
     Import(ImportStatement),
+    Define(DefineStatement),
 }
 
 impl IfStatement {

@@ -15,11 +15,16 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    Mod,
+
     Less,
     Greater,
-    Mod,
-    GreaterEquals,
+
     LessEquals,
+    GreaterEquals,
+
+    Equals,
+    NotEquals,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,16 +40,26 @@ impl BinaryOp {
             TokenKind::Sub => Self::Sub,
             TokenKind::Mul => Self::Mul,
             TokenKind::Div => Self::Div,
+            TokenKind::Percent => Self::Mod,
+
             TokenKind::Greater => Self::Greater,
             TokenKind::Less => Self::Less,
-            TokenKind::Percent => Self::Mod,
+
             TokenKind::GreaterEquals => Self::GreaterEquals,
             TokenKind::LessEquals => Self::LessEquals,
+
+            TokenKind::Equals => Self::Equals,
+            TokenKind::NotEquals => Self::NotEquals,
+
             token => {
                 eprintln!("Token: {:?} is unsuitable for binary operations.", token);
                 process::exit(1);
             }
         } 
+    }
+
+    pub fn returns_bool(&self) -> bool {
+        matches!(self, BinaryOp::Less | BinaryOp::Greater | BinaryOp::LessEquals | BinaryOp::GreaterEquals | BinaryOp::Equals | BinaryOp::NotEquals )
     }
 }
 
@@ -55,11 +70,16 @@ impl fmt::Display for BinaryOp {
             Self::Sub => "-",
             Self::Mul => "*",
             Self::Div => "/",
+            Self::Mod => "%",
+
             Self::Greater => ">",
             Self::Less => "<",
-            Self::Mod => "%",
-            Self::GreaterEquals => ">=",
+
             Self::LessEquals => "<=",
+            Self::GreaterEquals => ">=",
+
+            Self::Equals => "==",
+            Self::NotEquals => "!=",
         };
 
         write!(f, "{s}")

@@ -2,10 +2,11 @@ pub mod compressed_ast;
 
 use std::collections::HashMap;
 use rand::distributions::{Alphanumeric, DistString};
+use crate::cil::typecheck::type_id::Type;
 use crate::cil::common::Tag;
-use crate::cil::compressed::compressed_ast::{Block, DeclareVariableStatement, DefineVariableStatement, ExpressionStatement, Integer};
+use crate::cil::compressed::compressed_ast::{Block, DeclareVariableStatement, DefineVariableStatement, ExpressionStatement, Integer, LoopStatement};
 use crate::cil::typecheck::{self, typechecked_ast::{ModuleName, }, typechecked_ast, type_id::{TypeId, Tag as TypeTag}, ModuleId};
-use crate::cil::typecheck::type_id::{Alias, Primitive, Type};
+use crate::cil::typecheck::type_id::{Alias, Primitive};
 
 pub struct Compressor {
     program: compressed_ast::Program
@@ -191,6 +192,20 @@ impl Compressor {
             typechecked_ast::Expression::Call(call) => self.compress_call_expression(call),
             typechecked_ast::Expression::VariableLookup(var) => self.compress_variable_lookup_expression(var),
             typechecked_ast::Expression::UseData(data) => self.compress_use_data_expression(data),
+            typechecked_ast::Expression::Bool(bo) => {
+                let mut value = 1;
+                if !bo.value {
+                    value = 0;
+                }
+
+                compressed_ast::Expression::Literal(compressed_ast::LiteralExpression {
+                    typ: compressed_ast::Type::Integer(Integer {
+                        signed: false,
+                        byte_size: 4,
+                    }),
+                    value
+                })
+            }
         }
     }
 
@@ -221,6 +236,16 @@ impl Compressor {
         })
     }
 
+    pub fn compress_while_statement(&mut self, typechecked_while: &typechecked_ast::WhileStatement) -> compressed_ast::Statement {
+        let cond = self.compress_expression(&typechecked_while.cond);
+        let block  =self.compress_block(&typechecked_while.block);
+
+        compressed_ast::Statement::Loop(LoopStatement {
+            cond,
+            block,
+        })
+    }
+
     pub fn compress_statement(&mut self, typechecked_statement: &typechecked_ast::Statement) -> compressed_ast::Statement {
         match typechecked_statement {
             typechecked_ast::Statement::Return(ret) => {
@@ -234,6 +259,9 @@ impl Compressor {
             }
             typechecked_ast::Statement::Expression(expr) => {
                 self.compress_expression_statement(expr)
+            }
+            typechecked_ast::Statement::While(w) => {
+                self.compress_while_statement(w)
             }
         }
     }

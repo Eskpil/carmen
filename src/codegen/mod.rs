@@ -1,4 +1,4 @@
-use cranelift_codegen::ir::{types::*, ExtFuncData, ExternalName, Function, UserExternalName, UserFuncName, Value};
+use cranelift_codegen::ir::{types::*, ExtFuncData, ExternalName, Function, UserExternalName, UserFuncName, Value, Block};
 use cranelift_codegen::ir::{AbiParam, InstBuilder, Signature};
 use cranelift_codegen::isa::{lookup};
 use cranelift_codegen::settings;
@@ -8,6 +8,7 @@ use cranelift_object::{ObjectBuilder, ObjectModule};
 use target_lexicon::{Architecture, BinaryFormat, Environment, OperatingSystem, Triple, Vendor};
 
 use std::collections::HashMap;
+use cranelift_codegen::ir::condcodes::IntCC;
 
 use crate::ast::BinaryOp;
 use crate::cil::compressed::compressed_ast;
@@ -27,7 +28,7 @@ pub struct Context {
     data_id_cache: HashMap<String, DataId>,
     variables: HashMap<u32, Variable>,
 
-    block_has_returned: bool,
+    function_has_returned: bool,
 }
 
 fn convert_int(int: &compressed_ast::Integer) -> Type {
@@ -93,7 +94,7 @@ impl Context {
 
             variables: HashMap::new(),
 
-            block_has_returned: false,
+            function_has_returned: false,
         }
     }
 
@@ -143,29 +144,72 @@ impl Context {
         }
     }
 
+    pub fn generate_binary_expression(&mut self, expr: &compressed_ast::BinaryExpression, builder: &mut FunctionBuilder) -> Vec<Value> {
+        let lhs = self.generate_expression(&expr.lhs, builder);
+        let rhs = self.generate_expression(&expr.rhs, builder);
+
+        assert!(!lhs.is_empty());
+        assert!(!rhs.is_empty());
+
+        match expr.op {
+            BinaryOp::Add => {
+                vec![builder.ins().iadd(lhs[0], rhs[0])]
+            }
+            BinaryOp::Sub => {
+                vec![builder.ins().isub(lhs[0], rhs[0])]
+            }
+            BinaryOp::Mul => {
+                vec![builder.ins().imul(lhs[0], rhs[0])]
+            }
+            b => unreachable!("op: {} is not suitable for expression", b)
+        }
+    }
+
+    pub fn generate_binary_condition(&mut self, expr: &compressed_ast::BinaryExpression, builder: &mut FunctionBuilder) -> Vec<Value> {
+        let lhs = self.generate_expression(&expr.lhs, builder);
+        let rhs = self.generate_expression(&expr.rhs, builder);
+
+        assert!(!lhs.is_empty());
+        assert!(!rhs.is_empty());
+
+        // TODO: Differentiate signed and unsigned additions.
+        let op = match expr.op  {
+            BinaryOp::Greater => {
+                IntCC::UnsignedGreaterThan
+            }
+            BinaryOp::GreaterEquals => {
+                IntCC::UnsignedGreaterThanOrEqual
+            }
+
+            BinaryOp::Less => {
+                IntCC::UnsignedLessThan
+            }
+            BinaryOp::LessEquals => {
+                IntCC::UnsignedLessThanOrEqual
+            }
+
+            BinaryOp::Equals => {
+                IntCC::Equal
+            }
+            BinaryOp::NotEquals => {
+                IntCC::NotEqual
+            }
+            b => unreachable!("op: {} is not suitable for condition", b)
+        };
+
+        vec![builder.ins().icmp(op, lhs[0], rhs[0])]
+    }
+
     pub fn generate_expression(&mut self, expr: &compressed_ast::Expression, builder: &mut FunctionBuilder) -> Vec<Value> {
         match expr {
             compressed_ast::Expression::Literal(lit) => {
                 vec![builder.ins().iconst(convert_type(&lit.typ), lit.value as i64)]
             }
             compressed_ast::Expression::Binary(bin) => {
-                let lhs = self.generate_expression(&bin.lhs, builder);
-                let rhs = self.generate_expression(&bin.rhs, builder);
-
-                assert!(!lhs.is_empty());
-                assert!(!rhs.is_empty());
-
-                match bin.op {
-                    BinaryOp::Add => {
-                        vec![builder.ins().iadd(lhs[0], rhs[0])]
-                    }
-                    BinaryOp::Sub => {
-                        vec![builder.ins().isub(lhs[0], rhs[0])]
-                    }
-                    BinaryOp::Mul => {
-                        vec![builder.ins().imul(lhs[0], rhs[0])]
-                    }
-                    b => todo!("implement: {}", b.to_string())
+                if bin.op.returns_bool() {
+                    self.generate_binary_condition(bin, builder)
+                } else {
+                    self.generate_binary_expression(bin, builder)
                 }
             }
             compressed_ast::Expression::VariableLookup(vl) => {
@@ -208,12 +252,12 @@ impl Context {
         }
     }
 
-    pub fn generate_statement(&mut self, stmt: &compressed_ast::Statement, builder: &mut FunctionBuilder) {
+    pub fn generate_statement(&mut self, stmt: &compressed_ast::Statement, parent_block: Block, builder: &mut FunctionBuilder) {
         match stmt {
             compressed_ast::Statement::Return(ret) => {
                 let val = self.generate_expression(&ret.expr, builder);
                 builder.ins().return_(&val);
-                self.block_has_returned = true;
+                self.function_has_returned = true;
             }
             compressed_ast::Statement::DeclareVariable(decl) => {
                 let var  =Variable::from_u32(decl.id);
@@ -231,45 +275,76 @@ impl Context {
             compressed_ast::Statement::Expression(expr) => {
                 self.generate_expression(&expr.expr, builder);
             }
+            compressed_ast::Statement::Loop(lo) => {
+                let cond_block = builder.create_block();
+                let body_block = builder.create_block();
+                let end_block = builder.create_block();
+
+                builder.ins().jump(cond_block, &[]);
+                builder.switch_to_block(cond_block);
+                {
+                    let res = self.generate_expression(&lo.cond, builder);
+                    assert_eq!(1, res.len());
+                    let res = res[0];
+
+                    builder.ins().brif(res, body_block, &[], end_block, &[]);
+                }
+
+                builder.switch_to_block(body_block);
+                {
+                    self.fill_block_without_parameters(&lo.block, body_block, builder);
+                    builder.ins().jump(cond_block, &[]);
+                }
+
+
+                builder.switch_to_block(end_block);
+                builder.seal_block(end_block);
+                builder.seal_block(cond_block);
+                builder.seal_block(body_block);
+
+                println!("current: {} parent: {}", builder.current_block().unwrap(), parent_block);
+
+                // builder.switch_to_block(parent_block);
+
+                println!("made loop statement");
+            }
+        }
+    }
+
+    pub fn fill_block_without_parameters(&mut self, block: &compressed_ast::Block, parent_block: Block, builder: &mut FunctionBuilder) {
+        for stmt in &block.body {
+            self.generate_statement(stmt, parent_block, builder);
         }
     }
 
     pub fn generate_block(&mut self, block: &compressed_ast::Block, builder: &mut FunctionBuilder) {
         let ir_block = builder.create_block();
-        let mut has_switched_block = false;
 
         if !block.parameters.is_empty() {
-            for (id, typ) in block.parameters.clone() {
-                let block_param = builder.append_block_param(ir_block, convert_type(&typ));
-
-                if !has_switched_block {
-                    builder.switch_to_block(ir_block);
-                    has_switched_block = true
-                }
-
-                let var = Variable::from_u32(id);
-                builder.declare_var(var, convert_type(&typ));
-                builder.def_var(var, block_param);
-
-                self.variables.insert(id, var);
-            }
+            builder.append_block_params_for_function_params(ir_block);
         }
 
-        if !has_switched_block {
-            builder.switch_to_block(ir_block);
+        builder.switch_to_block(ir_block);
+
+        let mut i = 0;
+        while block.parameters.len() > i {
+            let (id, typ) = block.parameters.get(i).unwrap();
+            let block_param = builder.block_params(ir_block)[i];
+            let var = Variable::from_u32(*id);
+            builder.declare_var(var, convert_type(typ));
+            builder.def_var(var, block_param);
+            self.variables.insert(*id, var);
+
+            i += 1;
         }
 
-        for stmt in block.body.clone() {
-            self.generate_statement(&stmt, builder);
+        for stmt in &block.body {
+            println!("making statement: {:?}", stmt);
+            self.generate_statement(stmt, ir_block, builder);
         }
 
-        if !self.block_has_returned {
-            builder.ins().return_(&[]);
-        }
-
-        self.block_has_returned = false;
+        builder.seal_block(ir_block);
     }
-
     pub fn generate_function_definition(&mut self, definition: &compressed_ast::FunctionDefinition) {
         // inefficient, i do not care. Borrow checker got me tired.
         let cache = self.func_id_cache.clone();
@@ -282,11 +357,16 @@ impl Context {
         let mut builder_context = FunctionBuilderContext::new();
         let mut builder = FunctionBuilder::new(&mut func, &mut builder_context);
 
-        self.generate_block(&definition.block, &mut builder);
+        let _ = self.generate_block(&definition.block, &mut builder);
 
-        builder.seal_all_blocks();
+        if !self.function_has_returned {
+            builder.ins().return_(&[]);
+        }
+
+        self.function_has_returned = false;
+
         builder.finalize();
-//
+
         self.ctx.func = func;
         println!("{}", self.ctx.func.display());
 
