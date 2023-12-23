@@ -1,9 +1,8 @@
 use std::any::Any;
-use std::primitive;
 use crate::ast::definitions::ExplicitType;
 
 pub mod aliases {
-    pub const USIZE: &'static str = "usize";
+    pub const USIZE: &str = "usize";
 
 }
 
@@ -21,11 +20,9 @@ pub type TypeResult<T> = Result<T, TypeError>;
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Tag {
     Primitive,
-    Pointer,
 
+    Pointer,
     Alias,
-    Struct,
-    Enum,
 }
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -137,23 +134,8 @@ impl Pointer {
 
 impl TypeId {
     #[inline]
-    pub fn id(&self) -> u32 {
-        self.id
-    }
-
-    #[inline]
     pub fn is_primitive(&self) -> bool {
         self.tag == Tag::Primitive
-    }
-
-    #[inline]
-    pub fn is_struct(&self) -> bool {
-        self.tag == Tag::Struct
-    }
-
-    #[inline]
-    pub fn is_enum(&self) -> bool {
-        self.tag == Tag::Enum
     }
 
     #[inline]
@@ -164,21 +146,6 @@ impl TypeId {
     #[inline]
     pub fn is_pointer(&self) -> bool {
         self.tag == Tag::Pointer
-    }
-
-    #[inline]
-    pub fn size(&self) -> usize {
-        match self.tag {
-            Tag::Primitive => {
-                let primitive = self.d.downcast_ref::<Primitive>().unwrap();
-                primitive.size()
-            }
-            Tag::Alias => {
-                let to = self.d.downcast_ref::<Alias>().unwrap();
-                to.to.size()
-            }
-            o => todo!("implement: {:?}", o)
-        }
     }
 
     pub fn for_primitive(id: u32, primitive: Primitive) -> TypeId {
@@ -223,28 +190,24 @@ impl TypeId {
 
 impl Clone for TypeId {
     fn clone(&self) -> Self {
-        let mut data: Box<dyn Any>;
-
-        match self.tag {
+        let data: Box<dyn Any> = match self.tag {
             Tag::Primitive => {
                 let primitive = self.to_primitive();
-                data = Box::new(primitive);
+                Box::new(primitive)
             }
             Tag::Alias => {
                 let alias = self.to_alias();
-                data = Box::new(alias)
+                Box::new(alias)
             }
             Tag::Pointer => {
                 let pointer = self.to_pointer();
-                data = Box::new(pointer)
+                Box::new(pointer)
             }
-            o => todo!("implement: {:?}", o)
-        }
-
+        };
 
         TypeId {
-            id: self.id.clone(),
-            tag: self.tag.clone(),
+            id: self.id,
+            tag: self.tag,
             d: data,
         }
     }
@@ -253,10 +216,6 @@ impl Clone for TypeId {
 impl PartialEq for TypeId {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
-    }
-
-    fn ne(&self, other: &Self) -> bool {
-        self.id != other.id
     }
 }
 
@@ -309,24 +268,15 @@ impl TypePool {
     }
 
     pub fn find_pointer(&self, to: TypeId) -> Option<TypeId> {
-        match self.types.iter().find(|id| { id.is_pointer() && *id.to_pointer().to == to}) {
-            Some(pointer) => Some(pointer.clone()),
-            None => None,
-        }
+        self.types.iter().find(|id| { id.is_pointer() && *id.to_pointer().to == to}).cloned()
     }
 
     pub fn find_primitive(&self, primitive: &Primitive) -> Option<TypeId> {
-       match self.types.iter().find(|id| { id.is_primitive() && id.to_primitive() == *primitive }) {
-           Some(primitive) => Some(primitive.clone()),
-           None => None
-       }
+        self.types.iter().find(|id| { id.is_primitive() && id.to_primitive() == *primitive }).cloned()
     }
 
     pub fn find_alias(&self, name: &str) -> Option<TypeId> {
-        match self.types.iter().find(|id| { id.is_alias() && id.to_alias().name == name }) {
-            Some(alias) => Some(alias.clone()),
-            None => None,
-        }
+        self.types.iter().find(|id| { id.is_alias() && id.to_alias().name == name }).cloned()
     }
 
     pub fn find(&self, name: String) -> TypeResult<TypeId> {
@@ -349,7 +299,7 @@ impl TypePool {
     pub fn find_explicit_type(&self, explicit_type: &ExplicitType) -> TypeResult<TypeId> {
         match explicit_type {
             ExplicitType::Name(name) => self.find(name.clone()),
-            ExplicitType::Pointer(to) => Ok(self.find_pointer(self.find_explicit_type(&*to).unwrap()).unwrap()),
+            ExplicitType::Pointer(to) => Ok(self.find_pointer(self.find_explicit_type(to).unwrap()).unwrap()),
             o => todo!("implement: {:?}", o)
         }
     }

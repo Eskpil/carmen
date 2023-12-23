@@ -4,14 +4,11 @@ use std::process;
 #[derive(Debug, Clone)]
 pub enum Step {
     Parsing,
-    Checking,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Level {
     Error,
-    Warning,
-    Info,
     Ignore,
 }
 
@@ -33,15 +30,6 @@ impl OceanError {
         }
     }
 
-    pub fn no_span(level: Level, step: Step, message: String) -> Self {
-        Self {
-            step,
-            level,
-            span: None,
-            message,
-        }
-    }
-
     pub fn report(&self) {
         match &self.span {
             Some(span) => match self.level {
@@ -52,30 +40,12 @@ impl OceanError {
                     );
                     process::exit(1);
                 }
-                Level::Warning => {
-                    println!(
-                        "\x1b[33m{}:{}:{}\x1b[0m \x1b[1m{:?}:\x1b[0m {}",
-                        span.file_name, span.row, span.col, self.step, self.message
-                    );
-                }
-                Level::Info => {
-                    println!(
-                        "\x1b[36m{}:{}:{}\x1b[0m \x1b[1m{:?}:\x1b[0m {}",
-                        span.file_name, span.row, span.col, self.step, self.message
-                    );
-                }
                 Level::Ignore => {}
             },
             None => match self.level {
                 Level::Error => {
                     eprintln!("\x1b[31m{:?}\x1b[0m {}", self.step, self.message);
                     process::exit(1);
-                }
-                Level::Warning => {
-                    println!("\x1b[33m{:?}\x1b[0m {}", self.step, self.message);
-                }
-                Level::Info => {
-                    println!("\x1b[36m{:?}\x1b[0m {}", self.step, self.message);
                 }
                 Level::Ignore => {}
             },

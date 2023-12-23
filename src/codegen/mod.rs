@@ -1,4 +1,3 @@
-use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::{types::*, ExtFuncData, ExternalName, Function, UserExternalName, UserFuncName, Value};
 use cranelift_codegen::ir::{AbiParam, InstBuilder, Signature};
 use cranelift_codegen::isa::{lookup};
@@ -125,7 +124,7 @@ impl Context {
         self.data_id_cache.insert(declaration.name.clone(), data_id);
     }
 
-    pub fn generate_declarations(&mut self, declarations: &Vec<compressed_ast::Declaration>) {
+    pub fn generate_declarations(&mut self, declarations: &[compressed_ast::Declaration]) {
         for declaration in declarations.iter() {
             match declaration {
                 compressed_ast::Declaration::Function(function) => {
@@ -138,14 +137,10 @@ impl Context {
         }
     }
 
-    pub fn generate_definitions(&mut self, definitions: &Vec<compressed_ast::FunctionDefinition>) {
+    pub fn generate_definitions(&mut self, definitions: &[compressed_ast::FunctionDefinition]) {
         for definition in definitions.iter() {
             self.generate_function_definition(definition);
         }
-    }
-
-    pub fn get_func_id(&mut self, name: String) -> &mut FuncIdEntry {
-        self.func_id_cache.get_mut(&*name).expect("no func id")
     }
 
     pub fn generate_expression(&mut self, expr: &compressed_ast::Expression, builder: &mut FunctionBuilder) -> Vec<Value> {
@@ -154,13 +149,13 @@ impl Context {
                 vec![builder.ins().iconst(convert_type(&lit.typ), lit.value as i64)]
             }
             compressed_ast::Expression::Binary(bin) => {
-                let lhs = self.generate_expression(&*bin.lhs, builder);
-                let rhs = self.generate_expression(&*bin.rhs, builder);
+                let lhs = self.generate_expression(&bin.lhs, builder);
+                let rhs = self.generate_expression(&bin.rhs, builder);
 
-                assert!(lhs.len() > 0);
-                assert!(rhs.len() > 0);
+                assert!(!lhs.is_empty());
+                assert!(!rhs.is_empty());
 
-                let res = match bin.op {
+                match bin.op {
                     BinaryOp::Add => {
                         vec![builder.ins().iadd(lhs[0], rhs[0])]
                     }
@@ -171,9 +166,7 @@ impl Context {
                         vec![builder.ins().imul(lhs[0], rhs[0])]
                     }
                     b => todo!("implement: {}", b.to_string())
-                };
-
-                res
+                }
             }
             compressed_ast::Expression::VariableLookup(vl) => {
                 vec![builder.use_var(Variable::from_u32(vl.id))]
@@ -184,7 +177,7 @@ impl Context {
 
                 let func_external_name = builder
                     .func
-                    .declare_imported_user_function(UserExternalName::new(0, func_entry.id.clone().as_u32()));
+                    .declare_imported_user_function(UserExternalName::new(0, func_entry.id.as_u32()));
 
                 let func_sig_ref = builder.import_signature(func_entry.sig.clone());
                 let func_ref = builder.import_function(ExtFuncData {
@@ -196,8 +189,8 @@ impl Context {
                 let mut arguments = Vec::<Value>::new();
 
                 for arg in &call.arguments {
-                    let expr = self.generate_expression(&*arg, builder);
-                    assert!(expr.len() > 0);
+                    let expr = self.generate_expression(arg, builder);
+                    assert!(!expr.is_empty());
                     arguments.push(expr[0]);
                 }
 
@@ -208,11 +201,10 @@ impl Context {
                 let cache = self.data_id_cache.clone();
                 let data_id = cache.get(&*data.name).expect("could not find data id");
 
-                let global_value = self.module.declare_data_in_func(*data_id, &mut builder.func);
+                let global_value = self.module.declare_data_in_func(*data_id, builder.func);
                 let val = builder.ins().global_value(I64, global_value);
                 vec![val]
             }
-            x => todo!("implement: {:?}", x)
         }
     }
 
@@ -239,7 +231,6 @@ impl Context {
             compressed_ast::Statement::Expression(expr) => {
                 self.generate_expression(&expr.expr, builder);
             }
-            x => todo!("implement: {:?}", x)
         }
     }
 
@@ -247,7 +238,7 @@ impl Context {
         let ir_block = builder.create_block();
         let mut has_switched_block = false;
 
-        if block.parameters.len() > 0 {
+        if !block.parameters.is_empty() {
             for (id, typ) in block.parameters.clone() {
                 let block_param = builder.append_block_param(ir_block, convert_type(&typ));
 
@@ -266,7 +257,6 @@ impl Context {
 
         if !has_switched_block {
             builder.switch_to_block(ir_block);
-            has_switched_block = true
         }
 
         for stmt in block.body.clone() {

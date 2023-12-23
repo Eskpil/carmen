@@ -6,7 +6,6 @@ use std::collections::{HashMap, VecDeque};
 use std::ops::Index;
 use rand::distributions::{Alphanumeric, DistString};
 use crate::ast;
-use crate::ast::BinaryOp::Mod;
 use crate::ast::definitions::ExplicitType;
 use crate::cil::common::{Stage, Tag};
 use crate::cil::typecheck::runtime::Runtime;
@@ -57,7 +56,7 @@ impl Scope {
             }
         }
 
-        return None
+        None
     }
 }
 
@@ -105,10 +104,6 @@ impl TypeChecker {
             unreachable!("no scope");
         }
     }
-
-    pub fn current_scope_mut(&mut self) -> Option<&mut Scope> {
-        self.scopes.front_mut()
-    }
     pub fn current_scope(&self) -> Option<&Scope> {
         return self.scopes.front();
     }
@@ -134,7 +129,7 @@ impl TypeChecker {
             return None;
         }
 
-        return if let Some(var) = scope.lookup_variable(name.clone()) {
+        if let Some(var) = scope.lookup_variable(name.clone()) {
             Some(var)
         } else {
             self.lookup_variable_in_scope(scope.parent, name.clone())
@@ -142,12 +137,8 @@ impl TypeChecker {
     }
 
     pub fn lookup_variable(&self, name: String) -> Option<Variable> {
-        let current_scope = self.current_scope();
-        if current_scope.is_none() {
-            return None
-        }
-
-        return self.lookup_variable_in_scope(current_scope.unwrap().id, name);
+        let current_scope = self.current_scope()?;
+        self.lookup_variable_in_scope(current_scope.id, name)
     }
 
     pub fn get_variable_id(&mut self) -> u32 {
@@ -174,12 +165,12 @@ impl TypeChecker {
             Expression::VariableLookup(var) => {
                 var.variable.typ.clone()
             }
-            Expression::UseData(data) => self.type_pool.find_pointer(self.type_pool.find("u8".to_string()).unwrap()).unwrap(),
+            Expression::UseData(_) => self.type_pool.find_pointer(self.type_pool.find("u8".to_string()).unwrap()).unwrap(),
         }
     }
 
     pub fn module_by_name(&self, name: String) -> &Module {
-        self.program.modules.iter().find(|e| e.clone().1.name == name ).unwrap().1
+        self.program.modules.iter().find(|e| e.1.name == name ).unwrap().1
     }
 
     pub fn module_has_function_in_scope(&self, module: &mut Module, name: &ast::expressions::LookupExpression) -> bool {
@@ -221,9 +212,9 @@ impl TypeChecker {
                 }
 
                 // safe to unwrap, we already checked if function is in scope.
-                let (id, declaration) = self.module_get_function_declaration(module, &call.name);
+                let (_, declaration) = self.module_get_function_declaration(module, &call.name);
                 let declaration = declaration.unwrap();
-                let mut arguments = Vec::<Box<Expression>>::new();
+                let mut arguments = vec![];
 
                 for i in 0..call.arguments.len() {
                     let argument = call.arguments.index(i);
@@ -233,7 +224,7 @@ impl TypeChecker {
                     if *signature_accept != self.expression_returns(&typechecked_argument, module) {
                         todo!("throw type error");
                     }
-                    arguments.push(Box::new(typechecked_argument));
+                    arguments.push(typechecked_argument);
                 }
 
                 Expression::Call(CallExpression {
@@ -381,7 +372,7 @@ impl TypeChecker {
 
     pub fn typecheck_function_definition(&mut self, function: &ast::statements::FunctionStatement, module: &mut Module) -> FunctionDefinition {
         let decl = module.get_function_declaration(function.name.clone());
-        if let None = decl {
+        if decl.is_none() {
             todo!("throw function not declared error");
         }
 

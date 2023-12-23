@@ -13,7 +13,6 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use ast::statements::Statement;
-use lexer::{Lexer, Span};
 use parser::Parser;
 use crate::cil::Pipeline;
 
@@ -50,7 +49,7 @@ impl Compiler {
 
     fn load_file(&self, module: String, path: PathBuf) -> ast::Module {
         let mut parser = Parser::new(
-            fs::read_to_string(path.to_str().unwrap().to_string()).expect("could not read file"),
+            fs::read_to_string(path.to_str().unwrap()).expect("could not read file"),
             path.to_str().unwrap().to_string(),
         );
 
@@ -97,5 +96,5 @@ fn main() {
         .open("a.out")
         .expect("failed to open file");
 
-    file.write_all(&*gen.build()).expect("could not write code to file")
+    file.write_all(&gen.build()).expect("could not write code to file")
 }

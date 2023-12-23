@@ -3,8 +3,7 @@ pub mod compressed_ast;
 use std::collections::HashMap;
 use rand::distributions::{Alphanumeric, DistString};
 use crate::cil::common::Tag;
-use crate::cil::compressed::compressed_ast::{Block, DeclareVariableStatement, DefineVariableStatement, ExpressionStatement, FunctionDeclaration, Integer};
-use crate::cil::compressed::compressed_ast::Declaration::Function;
+use crate::cil::compressed::compressed_ast::{Block, DeclareVariableStatement, DefineVariableStatement, ExpressionStatement, Integer};
 use crate::cil::typecheck::{self, typechecked_ast::{ModuleName, }, typechecked_ast, type_id::{TypeId, Tag as TypeTag}, ModuleId};
 use crate::cil::typecheck::type_id::{Alias, Primitive, Type};
 
@@ -101,7 +100,6 @@ impl Compressor {
             TypeTag::Pointer => {
                 self.transform_primitive(&Primitive::U64)
             }
-            o => todo!("implement other type_id: {:?}", o)
         }
     }
 
@@ -109,7 +107,7 @@ impl Compressor {
         let returns = self.transform_type_id(&signature.returns);
         let mut accepts = vec![];
         for accept in &signature.accepts {
-            accepts.push(self.transform_type_id(&accept));
+            accepts.push(self.transform_type_id(accept));
         }
 
         compressed_ast::Signature {
@@ -152,8 +150,8 @@ impl Compressor {
     pub fn compress_binary_expression(&mut self, typechecked_binary: &typechecked_ast::BinaryExpression) -> compressed_ast::Expression {
         compressed_ast::Expression::Binary(compressed_ast::BinaryExpression {
             op: typechecked_binary.op,
-            rhs: Box::new(self.compress_expression(&*typechecked_binary.rhs)),
-            lhs: Box::new(self.compress_expression(&*typechecked_binary.lhs)),
+            rhs: Box::new(self.compress_expression(&typechecked_binary.rhs)),
+            lhs: Box::new(self.compress_expression(&typechecked_binary.lhs)),
         })
     }
 
@@ -163,7 +161,7 @@ impl Compressor {
         let decl = self.find_function_decl_by_module_name(&typechecked_call.name);
         let mut arguments = vec![];
         for arg in &typechecked_call.arguments {
-            arguments.push(Box::new(self.compress_expression(&*arg)));
+            arguments.push(self.compress_expression(arg));
         }
 
         compressed_ast::Expression::Call(compressed_ast::CallExpression {
@@ -267,7 +265,7 @@ impl Compressor {
     }
 
     pub fn compress_definition(&mut self, typechecked_definition: &typechecked_ast::FunctionDefinition) {
-        let definition = self.compress_function_definition(&typechecked_definition);
+        let definition = self.compress_function_definition(typechecked_definition);
         self.program.definitions.push(definition);
     }
 

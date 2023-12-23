@@ -1,6 +1,5 @@
-use cranelift_object::object::SectionKind::Debug;
 use crate::cil::common::Tag;
-use crate::cil::typecheck::type_id::{aliases, Primitive, TypePool};
+use crate::cil::typecheck::type_id::{Primitive};
 use crate::cil::typecheck::typechecked_ast::{Block, CallExpression, Declaration, Expression, ExpressionStatement, FunctionDeclaration, FunctionDefinition, LiteralExpression, Module, ModuleName, ReturnStatement, Signature, Statement};
 use crate::cil::typecheck::TypeChecker;
 
@@ -44,7 +43,7 @@ impl Runtime {
         {
             let module = typechecker.module_by_name("main".to_owned());
             let decl = module.get_function_declaration("main".to_owned());
-            if let None = decl {
+            if decl.is_none() {
                 todo!("main module missing main function");
             }
             let decl = decl.unwrap();
@@ -79,6 +78,11 @@ impl Runtime {
     }
 
     pub fn generate_main(&mut self, typechecker: &TypeChecker) {
+        if !self.with_libc {
+            // TODO: Use _start and parse arguments from stack manually.
+            todo!("generate runtime without libc")
+        }
+
         self.generate_main_declaration(typechecker);
         self.generate_main_definition(typechecker);
     }

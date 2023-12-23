@@ -32,7 +32,7 @@ pub struct UseDataExpression {
 #[derive(Debug, Clone)]
 pub struct CallExpression {
     pub name: Name,
-    pub arguments: Vec<Box<Expression>>,
+    pub arguments: Vec<Expression>,
 }
 
 #[derive(Debug, Clone)]

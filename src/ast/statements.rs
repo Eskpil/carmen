@@ -3,7 +3,6 @@ use super::expressions::Expression;
 use crate::lexer::Span;
 
 use serde::{Deserialize, Serialize};
-use crate::cil::typecheck::typechecked_ast::Block;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IfStatement {
@@ -141,6 +140,6 @@ impl Statement {
 
 impl BlockStatement {
     pub fn is_empty(&self) -> bool {
-        0 >= self.statements.len()
+        self.statements.is_empty()
     }
 }

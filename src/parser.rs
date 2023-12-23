@@ -17,9 +17,8 @@ use crate::lexer::{Lexer, Token, TokenKind, Span};
 use crate::errors::{OceanError, Level, Step};
 use crate::unescape::{unescape};
 use std::iter::Peekable;
-use std::process::id;
-use crate::ast::expressions::{BinaryExpression, BooleanExpression, CallExpression, EmptyExpression, LiteralExpression, StringLiteralExpression, UnaryExpression, IdentifierExpression, LookupExpression};
-use crate::ast::statements::{BlockStatement, ExpressionStatement, FunctionStatement, ImportStatement, LetStatement, ReturnStatement, WhileStatement, WithStatement};
+use crate::ast::expressions::{BinaryExpression, BooleanExpression, CallExpression, EmptyExpression, LiteralExpression, StringLiteralExpression, UnaryExpression, LookupExpression};
+use crate::ast::statements::{BlockStatement, ExpressionStatement, FunctionStatement, ImportStatement, LetStatement, ReturnStatement, WhileStatement};
 
 type SyntaxResult<T> = Result<T, OceanError>;
 type ParseResult<T> = Result<T, OceanError>;
@@ -131,8 +130,8 @@ impl Parser {
                 token.span,
                 format!(
                     "Unexpected token: \x1b[1m{}\x1b[0m. Expected token: \x1b[1m{}\x1b[0m", 
-                    token.kind.to_string(), 
-                    expected.to_string()
+                    token.kind,
+                    expected,
                 ),
             ))
         } else {
@@ -149,8 +148,8 @@ impl Parser {
                 token.span,
                 format!(
                     "Unexpected token: \x1b[1m{}\x1b[0m. Expected token: \x1b[1m{}\x1b[0m", 
-                    token.kind.to_string(), 
-                    expected.to_string()
+                    token.kind,
+                    expected,
                 ),
             ))
 
@@ -214,7 +213,7 @@ impl Parser {
                     _ => {
                         let token = self.next_token()?;
                         return Err(
-                            OceanError::new(Level::Error, Step::Parsing, token.span, format!("Unexpected token: \x1b[1m{}\x1b[0m. Expected \x1b[1mExpression\x1b[0m.", token.kind.to_string()))
+                            OceanError::new(Level::Error, Step::Parsing, token.span, format!("Unexpected token: \x1b[1m{}\x1b[0m. Expected \x1b[1mExpression\x1b[0m.", token.kind))
                         );
                     }
                 }
@@ -259,7 +258,7 @@ impl Parser {
                             token.span, 
                             format!(
                                 "Expected \x1b[1moperator\x1b[0m or \x1b[1mexpression\x1b[0m terminater but found: \x1b[1m{}\x1b[0m.", 
-                                token.kind.to_string()
+                                token.kind
                             )
                         )
                     )
@@ -412,9 +411,7 @@ impl Parser {
             else_span
         );
 
-       let stmt = Statement::If(x);
-
-        return Ok(stmt);
+        Ok(Statement::If(x))
     }
 
     pub fn parse_while_loop(&mut self) -> ParseResult<Statement> {
@@ -498,9 +495,9 @@ impl Parser {
                     r_paren.span,
                     format!(
                         "Unexpected token: \x1b[1m{}\x1b[0m. Expected either token: \"\x1b[1m{}\x1b[0m\" or: \"\x1b[1m{}\x1b[0m\"", 
-                        self.peek().to_string(), 
-                        TokenKind::Semicolon.to_string(),
-                        TokenKind::LeftCurly.to_string(),
+                        self.peek(),
+                        TokenKind::Semicolon,
+                        TokenKind::LeftCurly,
                     ),
                 )   
             );           

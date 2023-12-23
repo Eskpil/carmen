@@ -1,7 +1,4 @@
-use std::collections::{HashMap, VecDeque};
-use std::ops::Deref;
 use crate::ast;
-use crate::ast::BinaryOp;
 
 pub mod typecheck;
 pub mod compressed;
@@ -27,7 +24,6 @@ impl Pipeline {
         let typechecked_program = typechecker.typecheck_modules(self.modules.clone());
 
         let mut compressor = compressed::Compressor::new();
-        let compressed_program = compressor.compress_program(&typechecked_program);
-        compressed_program
+        compressor.compress_program(&typechecked_program)
     }
 }

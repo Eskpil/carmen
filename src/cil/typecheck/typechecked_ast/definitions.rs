@@ -45,7 +45,7 @@ pub struct BinaryExpression {
 #[derive(Debug, Clone)]
 pub struct CallExpression {
     pub name: ModuleName,
-    pub arguments: Vec<Box<Expression>>
+    pub arguments: Vec<Expression>
 }
 
 #[derive(Debug, Clone)]
@@ -133,31 +133,12 @@ impl Module {
         self.get_function_declaration(name).is_some()
     }
 
-    pub fn has_data_declaration(&self, name: String) -> bool {
-        self.get_data_declaration(name).is_some()
-    }
-
     pub fn get_function_declaration(&self, name: String) -> Option<FunctionDeclaration> {
         for decl in &self.declarations {
             match decl {
                 Declaration::Function(func) => {
                     if func.name.name == name {
                         return Some(func.clone());
-                    }
-                }
-                _ => continue
-            }
-        }
-
-        None
-    }
-
-    pub fn get_data_declaration(&self, name: String) -> Option<DataDeclaration> {
-        for decl in &self.declarations {
-            match decl {
-                Declaration::Data(data) => {
-                    if data.name.name == name {
-                        return Some(data.clone());
                     }
                 }
                 _ => continue

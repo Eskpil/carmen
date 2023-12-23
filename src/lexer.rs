@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::iter::Iterator;
 use serde::{Deserialize, Serialize};
 
@@ -88,9 +89,9 @@ pub struct Lexer {
     pub file_name: String,
 }
 
-impl TokenKind {
-    pub fn to_string(&self) -> String {
-        match *self {
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let name: String = match *self {
             TokenKind::Literal => "Literal".into(),
             TokenKind::Identifier => "Identifier".into(),
             TokenKind::StringLiteral => "StringLiteral".into(),
@@ -145,25 +146,13 @@ impl TokenKind {
             TokenKind::LeftCurly => "{".into(),
 
             TokenKind::Eof => "eof".into(),
-        }
+        };
+
+        write!(f, "{name}")
     }
 }
 
 impl Token {
-    pub fn kind(kind: TokenKind) -> Token {
-        let span = Span {
-            file_name: "".into(),
-            row: 0,
-            col: 0,
-        };
-
-        Token {
-            kind,
-            value: kind.to_string(),
-            span,
-        }
-    }
-
     pub fn kind_loc(kind: TokenKind, row: usize, col: usize) -> Token {
         let span = Span {
             file_name: "".into(),
@@ -182,20 +171,6 @@ impl Token {
         Token {
             kind,
             value: kind.to_string(),
-            span,
-        }
-    }
-
-    pub fn value(kind: TokenKind, value: impl Into<String>) -> Token {
-        let span = Span {
-            file_name: "".into(),
-            row: 0,
-            col: 0,
-        };
-
-        Token {
-            kind,
-            value: value.into(),
             span,
         }
     }
@@ -227,7 +202,7 @@ impl Lexer {
         keywords.insert("import".into(), TokenKind::Import);
 
         Self {
-            source: source.into(),
+            source,
             start: 0,
             current: 0,
             keywords,
@@ -248,31 +223,29 @@ impl Lexer {
 
     pub fn numeric(&mut self) -> Token {
         let span = self.span();
-        while self.peek().is_digit(10) {
+        while self.peek().is_ascii_digit() {
             self.advance();
         }
 
-        if self.peek() == '.' && self.peek_next().is_digit(10) {
+        if self.peek() == '.' && self.peek_next().is_ascii_digit() {
             self.advance();
-            while self.peek().is_digit(10) {
+            while self.peek().is_ascii_digit() {
                 self.advance();
             }
         }
 
         let value = &self.source[self.start..self.current];
 
-        let token = Token {
+        Token {
             kind: TokenKind::Literal,
             value: value.into(),
             span,
-        };
-
-        token
+        }
     }
 
     pub fn identifier(&mut self) -> Token {
         let span = self.span();
-        while self.peek().is_alphabetic() || self.peek().is_digit(10) || self.peek() == '_' {
+        while self.peek().is_alphabetic() || self.peek().is_ascii_digit() || self.peek() == '_' {
             self.advance();
         }
 
@@ -284,11 +257,8 @@ impl Lexer {
             span,
         };
 
-        match self.keywords.get(value.into()) {
-            Option::Some(kind) => {
-                token.kind = kind.clone();
-            }
-            Option::None => {}
+        if let Some(kind) = self.keywords.get(value) {
+            token.kind = *kind;
         }
 
         token
@@ -326,23 +296,23 @@ impl Lexer {
         self.col += 1;
 
         let val = self.source.chars().nth(self.current - 1);
-
-        return val.unwrap();
+        val.unwrap()
     }
 
     pub fn is_at_end(&self) -> bool {
-        return self.current >= self.source.len();
+        self.current >= self.source.len()
     }
 
     pub fn peek_next(&self) -> char {
-        return self.source.chars().nth(self.current + 1).unwrap();
+        self.source.chars().nth(self.current + 1).unwrap()
     }
 
     pub fn peek(&self) -> char {
         if self.is_at_end() {
-            return '\0';
+            '\0'
+        } else {
+            self.source.chars().nth(self.current).unwrap()
         }
-        return self.source.chars().nth(self.current).unwrap();
     }
 }
 
@@ -357,7 +327,7 @@ impl Iterator for Lexer {
         let c = self.peek();
         self.start = self.current;
 
-        let token = match c {
+        match c {
             '\n' => {
                 self.row += 1;
                 self.col = 0;
@@ -438,9 +408,13 @@ impl Iterator for Lexer {
             }
             '=' => {
                 let span = self.span();
-                let token = Token::kind_span(TokenKind::Assignment, span);
                 self.advance();
-                Some(token)
+                if self.peek() == '=' {
+                    self.advance();
+                    Some(Token::kind_span(TokenKind::Equals, span))
+                } else {
+                    Some(Token::kind_span(TokenKind::Assignment, span))
+                }
             }
             '+' => {
                 let span = self.span();
@@ -470,9 +444,12 @@ impl Iterator for Lexer {
             }
             '!' => {
                 let span = self.span();
-                let token = Token::kind_span(TokenKind::Not, span);
                 self.advance();
-                Some(token)
+                if self.peek() == '"' {
+                    Some(Token::kind_span(TokenKind::NotEquals, span))
+                } else {
+                    Some(Token::kind_span(TokenKind::Not, span))
+                }
             }
             '-' => {
                 let span = self.span();
@@ -508,14 +485,12 @@ impl Iterator for Lexer {
             }
             '"' => Some(self.string()),
             _ => {
-                if c.is_digit(10) {
-                    return Some(self.numeric());
+                if c.is_ascii_digit() {
+                    Some(self.numeric())
+                } else {
+                    Some(self.identifier())
                 }
-
-                return Some(self.identifier());
             }
-        };
-
-        token
+        }
     }
 }

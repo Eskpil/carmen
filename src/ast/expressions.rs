@@ -1,7 +1,8 @@
+use core::fmt;
 use crate::lexer::Span;
 use super::{BinaryOp};
 use std::boxed::Box;
-use std::fmt::format;
+use std::fmt::{Formatter};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,12 +112,6 @@ impl Expression {
         }
     }
 
-    pub fn as_identifier(&self) -> Option<String> {
-        match self.clone() {
-            Expression::Identifier(i) => Some(i.name),
-            _ => None,
-        }
-    }
     pub fn as_lookup(&self) -> Option<LookupExpression> {
         match self.clone() {
             Expression::Lookup(l) => Some(l),
@@ -125,8 +120,8 @@ impl Expression {
     }
 }
 
-impl LookupExpression {
-    pub fn to_string(&self) -> String {
-        format!("{}", self.name)
+impl fmt::Display for LookupExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
     }
 }

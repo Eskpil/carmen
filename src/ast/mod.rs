@@ -1,8 +1,9 @@
 pub mod expressions;
 pub mod statements;
 pub mod definitions;
-mod util;
 
+use core::fmt;
+use std::fmt::Formatter;
 use crate::lexer::TokenKind;
 use std::process;
 
@@ -29,7 +30,7 @@ pub struct Module {
 
 impl BinaryOp {
     pub fn from_token_kind(kind: &TokenKind) -> Self {
-        match kind.clone() {
+        match kind {
             TokenKind::Add => Self::Add,
             TokenKind::Sub => Self::Sub,
             TokenKind::Mul => Self::Mul,
@@ -45,19 +46,11 @@ impl BinaryOp {
             }
         } 
     }
+}
 
-    pub fn returns_bool(&self) -> bool {
-        match self.clone() {
-            Self::Greater 
-            | Self::Less
-            | Self::GreaterEquals
-            | Self::LessEquals => true,
-            _ => false,              
-        } 
-    }
-
-    pub fn to_string(&self) -> String {
-        let s = match self.clone() {
+impl fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
             Self::Add => "+",
             Self::Sub => "-",
             Self::Mul => "*",
@@ -69,6 +62,6 @@ impl BinaryOp {
             Self::LessEquals => "<=",
         };
 
-        s.into()
+        write!(f, "{s}")
     }
 }
