@@ -4,7 +4,7 @@ use crate::ast;
 use crate::ast::BinaryOp;
 
 pub mod typecheck;
-pub mod simplified;
+pub mod compressed;
 mod common;
 
 pub struct Pipeline {
@@ -22,12 +22,12 @@ impl Pipeline {
         self.modules.extend(modules);
     }
 
-    pub fn run(&mut self) -> simplified::Program {
+    pub fn run(&mut self) -> compressed::compressed_ast::Program {
         let mut typechecker = typecheck::TypeChecker::new();
         let typechecked_program = typechecker.typecheck_modules(self.modules.clone());
 
-        let mut simplifier = simplified::Simplifier::new();
-        let simplified_program = simplifier.simplify(&typechecked_program);
-        simplified_program
+        let mut compressor = compressed::Compressor::new();
+        let compressed_program = compressor.compress_program(&typechecked_program);
+        compressed_program
     }
 }

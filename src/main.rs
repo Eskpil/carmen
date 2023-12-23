@@ -6,6 +6,8 @@ mod lexer;
 mod parser;
 mod unescape;
 
+mod codegen;
+
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
@@ -85,5 +87,15 @@ fn main() {
 
     let mut pipeline = Pipeline::new();
     pipeline.load(compiler.modules);
-    pipeline.run();
+
+    let mut gen = codegen::Context::new();
+    gen.generate(&pipeline.run());
+
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open("a.out")
+        .expect("failed to open file");
+
+    file.write_all(&*gen.build()).expect("could not write code to file")
 }

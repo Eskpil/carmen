@@ -1,19 +1,24 @@
 pub mod typechecked_ast;
+pub mod type_id;
+mod runtime;
 
 use std::collections::{HashMap, VecDeque};
 use std::ops::Index;
 use rand::distributions::{Alphanumeric, DistString};
 use crate::ast;
+use crate::ast::BinaryOp::Mod;
 use crate::ast::definitions::ExplicitType;
-use crate::cil::common::Stage;
-use crate::cil::typecheck::typechecked_ast::{BinaryExpression, Block, CallExpression, convert_type, DataDeclaration, Declaration, DeclareVariableStatement, DefineVariableStatement, Expression, ExpressionStatement, FunctionDeclaration, FunctionDefinition, LiteralExpression, Module, ModuleName, ReturnStatement, Signature, Statement, Type, UseDataExpression, VariableLookupExpression};
+use crate::cil::common::{Stage, Tag};
+use crate::cil::typecheck::runtime::Runtime;
+use crate::cil::typecheck::type_id::{aliases, Primitive, TypeId, TypePool};
+use crate::cil::typecheck::typechecked_ast::{BinaryExpression, Block, CallExpression, DataDeclaration, Declaration, DeclareVariableStatement, DefineVariableStatement, Expression, ExpressionStatement, FunctionDeclaration, FunctionDefinition, LiteralExpression, Module, ModuleName, ReturnStatement, Signature, Statement, UseDataExpression, VariableLookupExpression};
 
-type ModuleId = u32;
+pub type ModuleId = u32;
 
 #[derive(Debug, Clone)]
 pub struct Variable {
     pub name: String,
-    pub typ: Type,
+    pub typ: TypeId,
     pub id: u32,
 }
 
@@ -22,7 +27,7 @@ pub struct Scope {
     pub id: u32,
     pub parent: u32,
     pub stage: Stage,
-    pub expected_return_type: Option<Type>,
+    pub expected_return_type: Option<TypeId>,
     pub variables: Vec<Variable>,
 }
 
@@ -40,6 +45,8 @@ pub struct TypeChecker {
     variable_id_counter: u32,
     module_id_counter: u32,
     modules: Vec<ast::Module>,
+
+    type_pool: TypePool,
 }
 
 impl Scope {
@@ -78,6 +85,8 @@ impl TypeChecker {
             module_id_counter: 0,
 
             modules: vec![],
+
+            type_pool: TypePool::new(),
         }
     }
 
@@ -152,27 +161,28 @@ impl TypeChecker {
         scope.variables.push(var);
     }
 
-    pub fn expression_returns(&self, expr: &Expression, current_module: &mut Module) -> Type {
+    pub fn expression_returns(&self, expr: &Expression, current_module: &mut Module) -> TypeId {
         match expr {
-            Expression::Literal(_) => Type::Usize,
+            Expression::Literal(_) => self.type_pool.find_alias(aliases::USIZE).unwrap(),
             Expression::Call(call) => {
                 let module = self.program.modules.get(&call.name.id).unwrap_or(current_module);
                 let decl = module.get_function_declaration(call.name.name.clone()).expect("could not find declaration");
-                decl.signature.returns[0].clone()
+                decl.signature.returns.clone()
             }
-            Expression::Binary(_) => Type::Usize,
+            // TODO: Support U8 literals as well.
+            Expression::Binary(_) => self.type_pool.find_alias(aliases::USIZE).unwrap(),
             Expression::VariableLookup(var) => {
                 var.variable.typ.clone()
             }
-            Expression::UseData(data) => Type::Pointer(Box::new(Type::U8)),
+            Expression::UseData(data) => self.type_pool.find_pointer(self.type_pool.find("u8".to_string()).unwrap()).unwrap(),
         }
     }
 
-    pub fn module_by_name(&mut self, name: String) -> &Module {
+    pub fn module_by_name(&self, name: String) -> &Module {
         self.program.modules.iter().find(|e| e.clone().1.name == name ).unwrap().1
     }
 
-    pub fn module_has_function_in_scope(&mut self, module: &mut Module, name: &ast::expressions::LookupExpression) -> bool {
+    pub fn module_has_function_in_scope(&self, module: &mut Module, name: &ast::expressions::LookupExpression) -> bool {
         if name.child.is_none() {
             return module.has_function_declaration(name.name.clone());
         }
@@ -200,7 +210,10 @@ impl TypeChecker {
     pub fn typecheck_expression(&mut self, ast_expression: &ast::expressions::Expression, module: &mut Module) -> Expression {
         match ast_expression {
             ast::expressions::Expression::Literal(literal) => {
-                Expression::Literal(LiteralExpression(literal.val))
+                Expression::Literal(LiteralExpression {
+                    typ: self.type_pool.find_alias(aliases::USIZE).expect("could not find usize"),
+                    value: literal.val,
+                })
             }
             ast::expressions::Expression::Call(call) => {
                 if !self.module_has_function_in_scope(module, &call.name) {
@@ -216,18 +229,15 @@ impl TypeChecker {
                     let argument = call.arguments.index(i);
                     let signature_accept = &declaration.signature.accepts[i];
                     let typechecked_argument = self.typecheck_expression(&argument.value, module);
+
                     if *signature_accept != self.expression_returns(&typechecked_argument, module) {
-                        println!("func: {} sig: {:?} arg: {:?}", call.name.to_string(), signature_accept, self.expression_returns(&typechecked_argument, module));
                         todo!("throw type error");
                     }
                     arguments.push(Box::new(typechecked_argument));
                 }
 
                 Expression::Call(CallExpression {
-                    name: ModuleName {
-                        id,
-                        name: declaration.name,
-                    },
+                    name: declaration.name,
                     arguments,
                 })
             }
@@ -246,12 +256,16 @@ impl TypeChecker {
                 let name = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
 
                 let data_decl = DataDeclaration {
-                    name: name.to_owned(),
+                    name: ModuleName {
+                        id: module.id,
+                        name,
+                    },
                     data: string.val.clone().into_bytes(),
+                    tags: vec![],
                 };
-                module.declarations.push(Declaration::Data(data_decl));
+                module.declarations.push(Declaration::Data(data_decl.clone()));
 
-                Expression::UseData(UseDataExpression { name: name.to_owned() } )
+                Expression::UseData(UseDataExpression { name: data_decl.name } )
             }
             ast::expressions::Expression::Binary(binary) => {
                 let lhs = self.typecheck_expression(&binary.lhs, module);
@@ -265,20 +279,40 @@ impl TypeChecker {
     }
 
     pub fn typecheck_function_declaration(&mut self, function: &ast::statements::FunctionStatement, module: &mut Module) -> FunctionDeclaration {
-        let mut accepts: Vec<Type> = vec![];
-        let mut returns: Vec<Type> = vec![];
+        let mut accepts: Vec<TypeId> = vec![];
+        let mut returns: TypeId = self.type_pool.find_primitive(&Primitive::Void).expect("wtf, no void?");
 
         for param in function.parameters.iter() {
-            accepts.push(convert_type(&param.defined_type));
+            let type_id = match self.type_pool.find_explicit_type(&param.typ) {
+                Ok(t) => t,
+                Err(e) => todo!("throw type error: {:?}", e)
+            };
+
+            accepts.push(type_id);
         }
 
         if function.return_type.clone() != ExplicitType::Empty {
-            returns.push(Type::Usize);
+            let type_id = match self.type_pool.find_explicit_type(&function.return_type) {
+                Ok(t) => t,
+                Err(e) => todo!("throw type error: {:?}", e)
+            };
+
+            returns = type_id;
+        }
+
+        let mut tags = vec![];
+
+        if function.external {
+            tags.push(Tag::NoMangle);
         }
 
         FunctionDeclaration {
-            name: function.name.clone(),
+            name: ModuleName {
+                id: module.id,
+                name: function.name.clone()
+            },
             signature: Signature { accepts, returns },
+            tags,
         }
     }
 
@@ -304,9 +338,11 @@ impl TypeChecker {
                 ast::statements::Statement::Let(let_statement) => {
                     let expr = self.typecheck_expression(&let_statement.expr, module);
 
+                    println!("declaring: {}@{:?}",let_statement.name, expr);
+
                     let variable = Variable {
                         name: let_statement.name.clone(),
-                        typ:  Type::Usize,
+                        typ:  self.expression_returns(&expr, module),
                         id: self.get_variable_id(),
                     };
 
@@ -344,15 +380,29 @@ impl TypeChecker {
     }
 
     pub fn typecheck_function_definition(&mut self, function: &ast::statements::FunctionStatement, module: &mut Module) -> FunctionDefinition {
+        let decl = module.get_function_declaration(function.name.clone());
+        if let None = decl {
+            todo!("throw function not declared error");
+        }
+
+
         let mut scope = self.new_scope();
-        scope.expected_return_type = Some(convert_type(&function.return_type));
+        let type_id = match self.type_pool.find_explicit_type(&function.return_type) {
+            Ok(t) => t,
+            Err(e) => todo!("throw type error: {:?}", e)
+        };
+        scope.expected_return_type = Some(type_id);
 
         for param in &function.parameters {
             let id = self.get_variable_id();
+            let type_id = match self.type_pool.find_explicit_type(&param.typ) {
+                Ok(t) => t,
+                Err(e) => todo!("throw type error: {:?}", e)
+            };
 
             scope.variables.push(Variable {
                 name: param.name.clone(),
-                typ: convert_type(&param.defined_type),
+                typ: type_id,
                 id,
             })
         }
@@ -363,7 +413,7 @@ impl TypeChecker {
         block.parameters = parameters;
 
         FunctionDefinition {
-            name: function.name.clone(),
+            name: decl.unwrap().name,
             block,
         }
 
@@ -401,8 +451,8 @@ impl TypeChecker {
     }
 
     pub fn typecheck_module(&mut self, ast_module: &ast::Module) {
-        self.module_id_counter += 1;
         let id = self.module_id_counter as ModuleId;
+        self.module_id_counter += 1;
         let mut module = Module::new(id, ast_module.name.clone());
 
         self.typecheck_imports(ast_module, &mut module);
@@ -412,11 +462,21 @@ impl TypeChecker {
         self.program.modules.insert(id, module);
     }
 
+    pub fn inject_runtime(&mut self, with_libc: bool) {
+        let id = self.module_id_counter;
+        self.module_id_counter += 1;
+
+        let rt = Runtime::new(id, with_libc);
+        self.program.modules.insert(id, rt.finalize(self));
+    }
+
     pub fn typecheck_modules(&mut self, modules: Vec<ast::Module>) -> Program {
         self.modules.extend(modules);
         let cache = self.modules.clone();
         let main = cache.iter().find(|m| { m.name == "main" }).expect("provided program does not have main module");
         self.typecheck_module(main);
+
+        self.inject_runtime(true);
 
 
         println!("typechecking modules: {:?}", self.program);

@@ -1,7 +1,9 @@
 use crate::ast::BinaryOp;
+use crate::cil::common::Tag;
 use crate::cil::typecheck::{Variable, typechecked_ast::Signature, ModuleId};
+use crate::cil::typecheck::type_id::TypeId;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ModuleName {
     pub id: ModuleId,
     pub name: String,
@@ -9,14 +11,16 @@ pub struct ModuleName {
 
 #[derive(Debug, Clone)]
 pub struct FunctionDeclaration {
-    pub name: String,
+    pub name: ModuleName,
     pub signature: Signature,
+    pub tags: Vec<Tag>,
 }
 
 #[derive(Debug, Clone)]
 pub struct DataDeclaration {
-    pub name: String,
+    pub name: ModuleName,
     pub data: Vec<u8>,
+    pub tags: Vec<Tag>,
 }
 
 #[derive(Debug, Clone)]
@@ -26,7 +30,10 @@ pub enum Declaration {
 }
 
 #[derive(Debug, Clone)]
-pub struct LiteralExpression(pub u64);
+pub struct LiteralExpression {
+    pub typ: TypeId,
+    pub value: u64,
+}
 
 #[derive(Debug, Clone)]
 pub struct BinaryExpression {
@@ -48,7 +55,7 @@ pub struct VariableLookupExpression {
 
 #[derive(Debug, Clone)]
 pub struct UseDataExpression {
-    pub name: String,
+    pub name: ModuleName,
 }
 
 #[derive(Debug, Clone)]
@@ -96,7 +103,7 @@ pub struct Block {
 
 #[derive(Debug, Clone)]
 pub struct FunctionDefinition {
-    pub name: String,
+    pub name: ModuleName,
     pub block: Block,
 }
 
@@ -123,26 +130,34 @@ impl Module {
     }
 
     pub fn has_function_declaration(&self, name: String) -> bool {
-        for decl in &self.declarations {
-            match decl {
-                Declaration::Function(func) => {
-                    if func.name == name {
-                        return true;
-                    }
-                }
-                _ => continue
-            };
-        }
+        self.get_function_declaration(name).is_some()
+    }
 
-        return false;
+    pub fn has_data_declaration(&self, name: String) -> bool {
+        self.get_data_declaration(name).is_some()
     }
 
     pub fn get_function_declaration(&self, name: String) -> Option<FunctionDeclaration> {
         for decl in &self.declarations {
             match decl {
                 Declaration::Function(func) => {
-                    if func.name == name {
+                    if func.name.name == name {
                         return Some(func.clone());
+                    }
+                }
+                _ => continue
+            }
+        }
+
+        None
+    }
+
+    pub fn get_data_declaration(&self, name: String) -> Option<DataDeclaration> {
+        for decl in &self.declarations {
+            match decl {
+                Declaration::Data(data) => {
+                    if data.name.name == name {
+                        return Some(data.clone());
                     }
                 }
                 _ => continue

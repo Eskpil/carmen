@@ -22,7 +22,7 @@ pub struct IfStatement {
 pub struct NamedParameter {
     pub name: String,
     pub span: Span,
-    pub defined_type: ExplicitType,
+    pub typ: ExplicitType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,11 +114,11 @@ impl IfStatement {
 }
 
 impl NamedParameter {
-    pub fn new(name: String, defined_type: ExplicitType, span: Span) -> Self {
+    pub fn new(name: String, typ: ExplicitType, span: Span) -> Self {
         Self {
             name,
             span,
-            defined_type,
+            typ,
         }
     }
 }
