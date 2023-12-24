@@ -3,13 +3,14 @@ import "io";
 fn main() -> usize {
     let i = 0;
     while 100 > i {
+        io.print(message: "parent\n");
+
         let b = 0;
         while 3 > b {
-            io.print(message: ">test123\n");
+            io.print(message: " >nest\n");
             b = b + 1;
         };
 
-        io.print(message: "Hello\n");
         i = i + 1;
     };
 

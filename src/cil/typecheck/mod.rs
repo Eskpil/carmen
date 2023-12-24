@@ -254,7 +254,7 @@ impl TypeChecker {
             ast::expressions::Expression::StringLiteral(string) => {
                 let name = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
 
-                let data_decl = DataDeclaration {
+                let mut data_decl = DataDeclaration {
                     name: ModuleName {
                         id: module.id,
                         name,
@@ -262,6 +262,10 @@ impl TypeChecker {
                     data: string.val.clone().into_bytes(),
                     tags: vec![],
                 };
+
+                // null terminate strings
+                data_decl.data.push(0u8);
+
                 module.declarations.push(Declaration::Data(data_decl.clone()));
 
                 Expression::UseData(UseDataExpression { name: data_decl.name } )
@@ -371,12 +375,15 @@ impl TypeChecker {
                 }
                 ast::statements::Statement::While(w) => {
                     let cond = self.typecheck_expression(&w.condition, module);
-                    println!("cond: {:?}", cond);
                     if self.expression_returns(&cond, module) != self.type_pool.find_primitive(&Primitive::Bool).expect("no bool?") {
                         todo!("throw no bool error");
                     }
 
+                    let scope = self.new_scope();
                     let block = self.typecheck_block(&w.body, module);
+
+                    _ = scope;
+
                     vec![Statement::While(WhileStatement {
                         cond,
                         block,
@@ -411,7 +418,6 @@ impl TypeChecker {
         if decl.is_none() {
             todo!("throw function not declared error");
         }
-
 
         let mut scope = self.new_scope();
         let type_id = match self.type_pool.find_explicit_type(&function.return_type) {
@@ -504,9 +510,6 @@ impl TypeChecker {
         self.typecheck_module(main);
 
         self.inject_runtime(true);
-
-
-        println!("typechecking modules: {:?}", self.program);
 
         self.program.clone()
     }

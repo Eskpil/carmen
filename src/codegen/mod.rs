@@ -57,7 +57,9 @@ fn convert_signature(sig: &mut Signature, cil_sig: &compressed_ast::Signature) {
         sig.params.push(AbiParam::new(convert_type(param)));
     }
 
-    sig.returns.push(AbiParam::new(convert_type(&cil_sig.returns)));
+    if let Some(returns) = &cil_sig.returns {
+        sig.returns.push(AbiParam::new(convert_type(returns)));
+    }
 }
 
 impl Context {
@@ -123,7 +125,7 @@ impl Context {
 
         let mut colocated = true;
         if linkage == Linkage::Import {
-            colocated =false;
+            colocated = false;
         }
 
         self.func_id_cache.insert(declaration.name.clone(), FuncIdEntry {
@@ -134,13 +136,15 @@ impl Context {
     }
 
     pub fn generate_data_declaration(&mut self, declaration: &compressed_ast::DataDeclaration) {
-        let data_id = self.module.declare_data(&declaration.name, Linkage::Export, true, false).expect("could not declare data");
+        let data_id = self.module.declare_data(&declaration.name, Linkage::Local, true, false).expect("could not declare data");
 
         let mut data_description = DataDescription::new();
         let slice = declaration.data.clone().into_boxed_slice();
         data_description.define(slice);
 
         self.module.define_data(data_id, &data_description).expect("could not define data");
+
+        println!("declaring data: {}@{data_id}", declaration.name);
 
         self.data_id_cache.insert(declaration.name.clone(), data_id);
     }
@@ -247,7 +251,7 @@ impl Context {
                 let func_ref = builder.import_function(ExtFuncData {
                     name: ExternalName::User(func_external_name),
                     signature: func_sig_ref,
-                    colocated: func_entry.colocated,
+                    colocated: true,
                 });
 
                 let mut arguments = Vec::<Value>::new();
@@ -280,7 +284,7 @@ impl Context {
                 self.function_has_returned = true;
             }
             compressed_ast::Statement::DeclareVariable(decl) => {
-                let var  =Variable::from_u32(decl.id);
+                let var = Variable::from_u32(decl.id);
                 builder.declare_var(var, convert_type(&decl.typ));
                 self.variables.insert(decl.id, var);
             }
@@ -325,6 +329,7 @@ impl Context {
 
                 builder.switch_to_block(end_block);
                 builder.seal_block(end_block);
+
                 builder.seal_block(cond_block);
                 builder.seal_block(body_block);
             }

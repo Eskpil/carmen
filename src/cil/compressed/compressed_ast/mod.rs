@@ -14,6 +14,6 @@ pub enum Type {
 
 #[derive(Debug, Clone)]
 pub struct Signature {
-    pub returns: Type,
+    pub returns: Option<Type>,
     pub accepts: Vec<Type>,
 }

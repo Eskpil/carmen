@@ -105,7 +105,10 @@ impl Compressor {
     }
 
     pub fn transform_signature(&mut self, signature: &typechecked_ast::Signature) -> compressed_ast::Signature {
-        let returns = self.transform_type_id(&signature.returns);
+        let mut returns = None;
+        if !signature.returns.is_void() {
+            returns = Some(self.transform_type_id(&signature.returns));
+        }
         let mut accepts = vec![];
         for accept in &signature.accepts {
             accepts.push(self.transform_type_id(accept));
@@ -314,8 +317,6 @@ impl Compressor {
             self.compress_module_declarations(typechecked_module);
         }
 
-        println!("INFO: Compressed declarations");
-
         for (_, typechecked_module) in typechecked_modules.iter() {
             self.compress_module_definitions(typechecked_module);
         }
@@ -323,8 +324,6 @@ impl Compressor {
 
     pub fn compress_program(&mut self, typechecked_program: &typecheck::Program) -> compressed_ast::Program {
         self.compress_modules(&typechecked_program.modules);
-        println!("\n\n compressed: {:?}", self.program);
-
         self.program.clone()
     }
 }

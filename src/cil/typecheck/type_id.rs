@@ -148,6 +148,15 @@ impl TypeId {
         self.tag == Tag::Pointer
     }
 
+    #[inline]
+    pub fn is_void(&self) -> bool {
+        if !self.is_primitive() {
+            return false;
+        }
+
+        self.to_primitive() == Primitive::Void
+    }
+
     pub fn for_primitive(id: u32, primitive: Primitive) -> TypeId {
         TypeId {
             id,
@@ -300,6 +309,7 @@ impl TypePool {
         match explicit_type {
             ExplicitType::Name(name) => self.find(name.clone()),
             ExplicitType::Pointer(to) => Ok(self.find_pointer(self.find_explicit_type(to).unwrap()).unwrap()),
+            ExplicitType::Empty => Ok(self.find_primitive(&Primitive::Void).expect("no void?")),
             o => todo!("implement: {:?}", o)
         }
     }

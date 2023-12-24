@@ -93,10 +93,11 @@ impl Compiler {
 
         file.write_all(&gen.build()).expect("could not write code to file");
 
-        let output = std::process::Command::new("clang").
+        let output = std::process::Command::new("ld").
             arg("-o").
             arg("bin").
             arg("a.out").
+            arg("syscalls.o").
             output();
 
         println!("exec: {:?}", String::from_utf8_lossy(&output.unwrap().stderr));
