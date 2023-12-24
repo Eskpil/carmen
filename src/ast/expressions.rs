@@ -112,6 +112,13 @@ impl Expression {
         }
     }
 
+    pub fn is_lookup(&self) -> bool {
+        match self {
+            Expression::Lookup(_) => true,
+            _ => false,
+        }
+    }
+
     pub fn as_lookup(&self) -> Option<LookupExpression> {
         match self.clone() {
             Expression::Lookup(l) => Some(l),

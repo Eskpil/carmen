@@ -1,0 +1,10 @@
+import "io";
+
+const width = 128;
+const height = 128;
+
+const cells = width * height;
+
+fn main() -> usize {
+    return 10 * cells;
+}

@@ -65,6 +65,14 @@ pub struct LetStatement {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConstStatement {
+    pub span: Span,
+    pub name: String,
+    pub explicit_type: ExplicitType,
+    pub expr: Expression,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReturnStatement {
     pub span: Span,
     pub expr: Expression,
@@ -96,6 +104,7 @@ pub enum Statement {
     Expression(ExpressionStatement),
     While(WhileStatement),
     Let(LetStatement),
+    Const(ConstStatement),
     Return(ReturnStatement),
     Import(ImportStatement),
     Define(DefineStatement),

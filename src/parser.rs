@@ -18,7 +18,7 @@ use crate::errors::{OceanError, Level, Step};
 use crate::unescape::{unescape};
 use std::iter::Peekable;
 use crate::ast::expressions::{BinaryExpression, BooleanExpression, CallExpression, EmptyExpression, LiteralExpression, StringLiteralExpression, UnaryExpression, LookupExpression};
-use crate::ast::statements::{BlockStatement, DefineStatement, ExpressionStatement, FunctionStatement, ImportStatement, LetStatement, ReturnStatement, WhileStatement};
+use crate::ast::statements::{BlockStatement, ConstStatement, DefineStatement, ExpressionStatement, FunctionStatement, ImportStatement, LetStatement, ReturnStatement, WhileStatement};
 use crate::cil;
 use crate::cil::common::{Tags};
 
@@ -572,7 +572,7 @@ impl Parser {
         if self.peek() != TokenKind::HashTag {
             return Ok(());
         }
-        let start = self.consume_next(TokenKind::HashTag)?.span;
+        let _ = self.consume_next(TokenKind::HashTag)?.span;
         let _ = self.consume_next(TokenKind::LeftParen)?;
 
         let mut tags = vec![];
@@ -592,6 +592,28 @@ impl Parser {
         });
 
         Ok(())
+    }
+
+    fn parse_const_statement(&mut self) -> ParseResult<Statement> {
+        let start = self.consume_next(TokenKind::Const)?;
+        let name  = self.consume_next(TokenKind::Identifier)?;
+
+        let mut explicit_type = ExplicitType::Empty;
+        if self.peek() == TokenKind::Colon {
+            explicit_type =self.parse_defined_type()?;
+        }
+
+        let _ = self.consume_next(TokenKind::Assignment)?;
+        let expr = self.parse_expression(0, None)?;
+
+        let end = self.consume_next(TokenKind::Semicolon);
+
+        Ok(Statement::Const(ConstStatement {
+            span: start.span,
+            name: name.value,
+            explicit_type,
+            expr,
+        }))
     }
 
 
@@ -616,6 +638,7 @@ impl Parser {
             }
             TokenKind::Identifier => self.parse_definition_statement(),
             TokenKind::Import => self.parse_import_statement(),
+            TokenKind::Const => self.parse_const_statement(),
             TokenKind::Eof => {
                 let token = self.consume_next(TokenKind::Eof)?;
                 self.ended = true;

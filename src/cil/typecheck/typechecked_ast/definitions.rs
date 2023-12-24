@@ -1,6 +1,6 @@
 use crate::ast::BinaryOp;
 use crate::cil::common::Tag;
-use crate::cil::typecheck::{Variable, typechecked_ast::Signature, ModuleId};
+use crate::cil::typecheck::{Variable, typechecked_ast::Signature, ModuleId, constants};
 use crate::cil::typecheck::type_id::TypeId;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -127,7 +127,9 @@ pub struct Module {
     pub imports: Vec<ModuleId>,
 
     pub declarations: Vec<Declaration>,
-    pub definitions: Vec<FunctionDefinition>
+    pub definitions: Vec<FunctionDefinition>,
+
+    pub constants: Vec<constants::Variable>,
 }
 
 impl Module {
@@ -138,6 +140,8 @@ impl Module {
            imports: vec![],
            declarations: vec![],
            definitions: vec![],
+
+           constants: vec![],
        }
     }
 
@@ -158,5 +162,11 @@ impl Module {
         }
 
         None
+    }
+
+    pub fn get_constants(&self) -> constants::Scope {
+        constants::Scope {
+            variables: self.constants.clone(),
+        }
     }
 }

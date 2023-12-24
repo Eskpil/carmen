@@ -107,7 +107,7 @@ impl Compiler {
 fn main() {
     let mut compiler = Compiler::new();
 
-    compiler.load_directory("./examples/hello_world".to_owned());
+    compiler.load_directory("./examples/gol".to_owned());
     compiler.compile();
 
 

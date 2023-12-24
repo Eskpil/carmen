@@ -1,0 +1,5 @@
+#(imported)
+fn write(fd: usize, buf: *u8, size: usize) -> usize;
+
+#(imported)
+fn strlen(buf: *u8) -> usize;

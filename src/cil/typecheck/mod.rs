@@ -1,6 +1,7 @@
 pub mod typechecked_ast;
 pub mod type_id;
 mod runtime;
+mod constants;
 
 use std::collections::{HashMap, VecDeque};
 use std::ops::Index;
@@ -38,7 +39,7 @@ pub struct Program {
 #[derive(Debug, Clone)]
 pub struct TypeChecker {
     pub program: Program,
-    pub scopes: VecDeque<Scope>,
+    pub scopes: Vec<Scope>,
 
     scope_id_counter: u32,
     variable_id_counter: u32,
@@ -70,8 +71,8 @@ impl TypeChecker {
             variables: vec![],
         };
 
-        let mut scopes = VecDeque::new();
-        scopes.push_front(global_scope);
+        let mut scopes = Vec::new();
+        scopes.push(global_scope);
 
         TypeChecker {
             program: Program {
@@ -105,27 +106,21 @@ impl TypeChecker {
         }
     }
     pub fn current_scope(&self) -> Option<&Scope> {
-        return self.scopes.front();
+        return self.scopes.last();
     }
 
     pub fn insert_scope(&mut self, scope: Scope) {
-        self.scopes.push_front(scope);
+        self.scopes.push(scope);
     }
 
     pub fn find_scope_by_id(&self, scope_id: u32) -> Option<&Scope> {
-        for scope in self.scopes.iter() {
-            if scope.id == scope_id {
-                return Some(scope)
-            }
-        }
-
-        None
+        self.scopes.iter().find(|s| { s.id == scope_id })
     }
 
     pub fn lookup_variable_in_scope(&self, scope_id: u32, name: String) -> Option<Variable> {
         let scope = self.find_scope_by_id(scope_id).expect("could not find scope");
 
-        if scope.parent == 0 {
+        if scope.stage == Stage::Global {
             return None;
         }
 
@@ -148,7 +143,7 @@ impl TypeChecker {
     }
 
     pub fn push_variable(&mut self, var: Variable) {
-        let scope = self.scopes.front_mut().expect("no scope");
+        let scope = self.scopes.last_mut().expect("no scope");
         scope.variables.push(var);
     }
 
@@ -179,6 +174,10 @@ impl TypeChecker {
 
     pub fn module_by_name(&self, name: String) -> &Module {
         self.program.modules.iter().find(|e| e.1.name == name ).unwrap().1
+    }
+
+    pub fn module_by_id(&self, id: &ModuleId) -> &Module {
+        self.program.modules.iter().find(|e| e.0 == id).unwrap().1
     }
 
     pub fn module_has_function_in_scope(&self, module: &mut Module, name: &ast::expressions::LookupExpression) -> bool {
@@ -241,15 +240,34 @@ impl TypeChecker {
                 })
             }
             ast::expressions::Expression::Lookup(lookup) => {
-                if lookup.child.is_none() {
-                    if let Some(variable) = self.lookup_variable(lookup.name.clone()) {
-                        return Expression::VariableLookup(VariableLookupExpression{variable });
-                    } else {
-                        todo!("throw variable not found error")
-                    }
+                // TODO: Support struct indirection or looking up constants from another module.
+                assert!(lookup.child.is_none());
+
+                // 1. Try to find it as a normal variable.
+                if let Some(variable) = self.lookup_variable(lookup.name.clone()) {
+                    return Expression::VariableLookup(VariableLookupExpression{variable });
                 }
 
-                todo!("support struct indirection")
+                // TODO: 2. Struct indirection.
+
+                // 3. Try find it as a constant expression
+                let name = constants::ResolvedModuleName {
+                    module: lookup.name.clone(),
+                    name: "".to_owned(),
+                };
+
+                println!("trying to find constant: {:?}", name);
+
+                let scope = self.get_constant_scope(module);
+                if scope.has(&name) {
+                    let var = scope.get(&name).unwrap();
+                    return Expression::Literal(LiteralExpression {
+                        typ: var.value.get_type_id().clone(),
+                        value: var.value.inner,
+                    })
+                }
+
+                todo!("throw error")
             }
             ast::expressions::Expression::StringLiteral(string) => {
                 let name = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
@@ -320,11 +338,46 @@ impl TypeChecker {
         }
     }
 
+    pub fn get_constant_scope(&mut self, module: &mut Module) -> constants::Scope {
+        let mut scope = module.get_constants();
+        scope.ignore_name();
+
+        for id in &module.imports {
+            let other = self.module_by_id(id);
+            scope.merge(&other.get_constants());
+        }
+
+        scope
+    }
+
+    pub fn typecheck_const_declaration(&mut self, const_: &ast::statements::ConstStatement, module: &mut Module) {
+        let scope = self.get_constant_scope(module);
+        let mut computer = constants::Computer::new(&scope);
+        let value = computer.compute_expression(&const_.expr, &const_.explicit_type, &self.type_pool);
+        if value.is_err() {
+            todo!("throw const computer error: {:?}", value.err().unwrap());
+        }
+        let value =value.unwrap();
+
+        module.constants.push(constants::Variable {
+            name: constants::ResolvedModuleName {
+                module: module.name.clone(),
+                name: const_.name.clone(),
+            },
+            typ: value.get_type_id().clone(),
+            value,
+        });
+    }
+
     pub fn typecheck_declarations(&mut self, ast_module: &ast::Module, module: &mut Module) {
         for stmt in &ast_module.statements {
-            let decl = match stmt.as_function() {
-                Some(function) => Declaration::Function(self.typecheck_function_declaration(&function, module)),
-                None => continue
+            let decl = match stmt {
+                ast::statements::Statement::Function(function) => Declaration::Function(self.typecheck_function_declaration(&function, module)),
+                ast::statements::Statement::Const(const_) => {
+                    self.typecheck_const_declaration(&const_, module);
+                    continue
+                },
+                _ => continue
             };
 
             module.declarations.push(decl);
@@ -403,6 +456,9 @@ impl TypeChecker {
                         variable: variable.unwrap(),
                         expr,
                     })]
+                }
+                ast::statements::Statement::Const(con) => {
+                    todo!("in block constants")
                 }
                 s => todo!("implement s: {:?}", s)
             };

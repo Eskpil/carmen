@@ -21,6 +21,7 @@ pub enum TokenKind {
     Struct,
     Colon,
     Extern,
+    Const,
 
     If,
     Else,
@@ -109,6 +110,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Function => "fn".into(),
             TokenKind::Struct => "struct".into(),
             TokenKind::Colon => ":".into(),
+            TokenKind::Const => "const".into(),
 
             TokenKind::If => "if".into(),
             TokenKind::Else => "else".into(),
@@ -204,6 +206,7 @@ impl Lexer {
         keywords.insert("return".into(), TokenKind::Return);
         keywords.insert("extern".into(), TokenKind::Extern);
         keywords.insert("import".into(), TokenKind::Import);
+        keywords.insert("const".into(), TokenKind::Const);
 
         Self {
             source,
