@@ -1,5 +1,5 @@
 use cranelift_codegen::ir::{
-    types::*, Block, Endianness, ExtFuncData, ExternalName, Function, InstBuilderBase, MemFlags,
+    types::*, Endianness, ExtFuncData, ExternalName, Function, MemFlags,
     UserExternalName, UserFuncName, Value,
 };
 use cranelift_codegen::ir::{AbiParam, InstBuilder, Signature};
@@ -8,11 +8,9 @@ use cranelift_codegen::settings;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_module::{default_libcall_names, DataDescription, DataId, FuncId, Linkage, Module};
 use cranelift_object::{ObjectBuilder, ObjectModule};
-use std::arch::x86_64::_bittest;
 use target_lexicon::{Architecture, BinaryFormat, Environment, OperatingSystem, Triple, Vendor};
 
 use cranelift_codegen::ir::condcodes::IntCC;
-use cranelift_codegen::packed_option::ReservedValue;
 use std::collections::HashMap;
 
 use crate::ast::BinaryOp;
@@ -23,7 +21,6 @@ use crate::cil::compressed::compressed_ast;
 struct FuncIdEntry {
     id: FuncId,
     sig: Signature,
-    colocated: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -144,17 +141,11 @@ impl Context {
             .declare_function(&declaration.name, linkage, &sig)
             .expect("could not declare function");
 
-        let mut colocated = true;
-        if linkage == Linkage::Import {
-            colocated = false;
-        }
-
         self.func_id_cache.insert(
             declaration.name.clone(),
             FuncIdEntry {
                 id: func_id,
                 sig,
-                colocated,
             },
         );
     }
@@ -360,7 +351,6 @@ impl Context {
     pub fn generate_statement(
         &mut self,
         stmt: &compressed_ast::Statement,
-        parent_block: Block,
         builder: &mut FunctionBuilder,
     ) {
         match stmt {
@@ -409,7 +399,7 @@ impl Context {
 
                 builder.switch_to_block(body_block);
                 {
-                    self.fill_block_without_parameters(&lo.block, body_block, builder);
+                    self.fill_block_without_parameters(&lo.block, builder);
                     builder.ins().jump(cond_block, &[]);
                 }
 
@@ -425,15 +415,14 @@ impl Context {
     pub fn fill_block_without_parameters(
         &mut self,
         block: &compressed_ast::Block,
-        parent_block: Block,
         builder: &mut FunctionBuilder,
     ) {
         for stmt in &block.body {
-            self.generate_statement(stmt, parent_block, builder);
+            self.generate_statement(stmt, builder);
         }
     }
 
-    pub fn generate_preload(&mut self, preload: &PreloadEntry, builder: &mut FunctionBuilder) {
+    fn generate_preload(&mut self, preload: &PreloadEntry, builder: &mut FunctionBuilder) {
         let val = self.generate_expression(&preload.expr, builder);
         assert!(!val.is_empty());
         let val = val[0];
@@ -470,9 +459,7 @@ impl Context {
             self.generate_preload(preload, builder);
         }
 
-        for stmt in &block.body {
-            self.generate_statement(stmt, ir_block, builder);
-        }
+        self.fill_block_without_parameters(block, builder);
 
         builder.seal_block(ir_block);
     }

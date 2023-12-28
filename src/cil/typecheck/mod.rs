@@ -18,7 +18,6 @@ use crate::cil::typecheck::typechecked_ast::{
 };
 use rand::distributions::{Alphanumeric, DistString};
 use std::collections::{HashMap, VecDeque};
-use std::env::var;
 use std::ops::Index;
 
 pub type ModuleId = u32;
@@ -45,7 +44,7 @@ pub struct Program {
 }
 
 #[derive(Debug, Clone)]
-pub(self) struct ExpressionContext {
+struct ExpressionContext {
     expected_type_id: Option<TypeId>,
     apply_substrate_read: bool,
 }
@@ -276,7 +275,7 @@ impl TypeChecker {
     }
 
     // TODO: This is fucking dirty
-    pub fn typecheck_array_init_values(
+    fn typecheck_array_init_values(
         &mut self,
         context: &mut ExpressionContext,
         ast_values: &Vec<ast::expressions::Expression>,
@@ -336,7 +335,7 @@ impl TypeChecker {
         values
     }
 
-    pub fn typecheck_substrate_expression(
+    fn typecheck_substrate_expression(
         &mut self,
         context: &mut ExpressionContext,
         ast_substrate: &ast::expressions::SubstrateExpression,
@@ -402,7 +401,7 @@ impl TypeChecker {
         }
     }
 
-    pub fn typecheck_expression(
+    fn typecheck_expression(
         &mut self,
         context: &mut ExpressionContext,
         ast_expression: &ast::expressions::Expression,
@@ -551,7 +550,7 @@ impl TypeChecker {
 
                 // 1.3 create a data declaration with the correct size.
                 let name = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
-                let mut data_decl = DataDeclaration {
+                let data_decl = DataDeclaration {
                     name: ModuleName {
                         id: module.id,
                         name,
@@ -846,7 +845,7 @@ impl TypeChecker {
 
                     vec![Statement::Expression(ExpressionStatement(expr))]
                 }
-                ast::statements::Statement::Const(con) => {
+                ast::statements::Statement::Const(_) => {
                     todo!("in block constants")
                 }
                 s => todo!("implement s: {:?}", s),

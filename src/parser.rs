@@ -329,9 +329,9 @@ impl Parser {
                     let token = self.next_token()?;
                     return Err(
                         OceanError::new(
-                            Level::Error, 
-                            Step::Parsing, 
-                            token.span, 
+                            Level::Error,
+                            Step::Parsing,
+                            token.span,
                             format!(
                                 "Expected \x1b[1moperator\x1b[0m or \x1b[1mexpression\x1b[0m terminater but found: \x1b[1m{}\x1b[0m.", 
                                 token.kind
@@ -616,7 +616,7 @@ impl Parser {
                         TokenKind::Semicolon,
                         TokenKind::LeftCurly,
                     ),
-                )   
+                )
             );
         }
 
@@ -704,7 +704,7 @@ impl Parser {
                 let _ = self.consume_next(TokenKind::Comma)?;
             }
         }
-        let end = self.consume_next(TokenKind::RightParen);
+        let _ = self.consume_next(TokenKind::RightParen);
 
         self.tag_context = Some(TagContext { tags });
 

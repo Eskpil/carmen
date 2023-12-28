@@ -1,11 +1,9 @@
 use crate::ast;
-use crate::ast::definitions::ExplicitType;
 use crate::ast::expressions::LookupExpression;
 use crate::ast::BinaryOp;
 use crate::cil::common::Endianness;
 use crate::cil::typecheck::type_id::{aliases, TypeError, TypeId, TypePool};
 use crate::lexer::Span;
-use serde::de::Unexpected::Str;
 
 #[derive(Debug, Clone)]
 pub enum ComputeError {
@@ -96,27 +94,27 @@ impl Value {
     }
 
     // These are tricky since they return boolean, we probably need to bring in the type pool.
-    pub fn less(&self, rhs: &Value) -> Value {
+    pub fn less(&self, _: &Value) -> Value {
         todo!("less");
     }
 
-    pub fn greater(&self, rhs: &Value) -> Value {
+    pub fn greater(&self, _: &Value) -> Value {
         todo!("greater");
     }
 
-    pub fn less_eq(&self, rhs: &Value) -> Value {
+    pub fn less_eq(&self, _: &Value) -> Value {
         todo!("less_eq");
     }
 
-    pub fn greater_eq(&self, rhs: &Value) -> Value {
+    pub fn greater_eq(&self, _: &Value) -> Value {
         todo!("greater_eq");
     }
 
-    pub fn eq(&self, rhs: &Value) -> Value {
+    pub fn eq(&self, _: &Value) -> Value {
         todo!("eq");
     }
 
-    pub fn ne(&self, rhs: &Value) -> Value {
+    pub fn ne(&self, _: &Value) -> Value {
         todo!("ne");
     }
 }
@@ -170,8 +168,8 @@ fn lookup_to_resolved_module_name(
     lookup: &LookupExpression,
     current_module_name: String,
 ) -> ResolvedModuleName {
-    let mut module = String::from("");
-    let mut name = String::from("");
+    let module ;
+    let name ;
     if lookup.child.is_some() {
         module = lookup.name.clone();
         name = lookup.child.clone().unwrap().name;
