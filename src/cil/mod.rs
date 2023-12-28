@@ -1,8 +1,8 @@
 use crate::ast;
 
-pub mod typecheck;
-pub mod compressed;
 pub mod common;
+pub mod compressed;
+pub mod typecheck;
 
 pub struct Pipeline {
     modules: Vec<ast::Module>,
@@ -10,9 +10,7 @@ pub struct Pipeline {
 
 impl Pipeline {
     pub fn new() -> Self {
-        Pipeline {
-            modules: vec![],
-        }
+        Pipeline { modules: vec![] }
     }
 
     pub fn load(&mut self, modules: Vec<ast::Module>) {

@@ -1,6 +1,10 @@
 import "syscalls";
 
 fn print(buf: *u8) -> usize {
-  let size = syscalls.strlen(buf: buf);
-  return syscalls.write(fd: 1, buf: buf, size: size);
+    let size = syscalls.strlen(buf: buf);
+    return syscalls.write(fd: 1, buf: buf, size: size);
+}
+
+fn putu(value: usize) {
+    syscalls.putusize(value: value);
 }

@@ -1,9 +1,9 @@
-use super::definitions::{ExplicitType};
-use super::expressions::{Expression, LookupExpression};
+use super::definitions::ExplicitType;
+use super::expressions::{Expression, LookupExpression, SubstrateExpression};
 use crate::lexer::Span;
 
-use serde::{Deserialize, Serialize};
 use crate::cil::common::Tags;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IfStatement {
@@ -53,7 +53,6 @@ pub struct WhileStatement {
     pub span: Span,
     pub condition: Expression,
     pub body: BlockStatement,
-
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,6 +65,14 @@ pub struct LetStatement {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConstStatement {
+    pub span: Span,
+    pub name: String,
+    pub explicit_type: ExplicitType,
+    pub expr: Expression,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VarStatement {
     pub span: Span,
     pub name: String,
     pub explicit_type: ExplicitType,
@@ -97,17 +104,28 @@ pub struct DefineStatement {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DefineSubstrateStatement {
+    pub substrate: SubstrateExpression,
+    pub expr: Expression,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Statement {
     If(IfStatement),
     Function(FunctionStatement),
     Block(BlockStatement),
     Expression(ExpressionStatement),
     While(WhileStatement),
+
     Let(LetStatement),
     Const(ConstStatement),
+    Var(VarStatement),
+
     Return(ReturnStatement),
     Import(ImportStatement),
+
     Define(DefineStatement),
+    DefineSubstrate(DefineSubstrateStatement),
 }
 
 impl IfStatement {
@@ -132,11 +150,7 @@ impl IfStatement {
 
 impl NamedParameter {
     pub fn new(name: String, typ: ExplicitType, span: Span) -> Self {
-        Self {
-            name,
-            span,
-            typ,
-        }
+        Self { name, span, typ }
     }
 }
 
@@ -144,14 +158,14 @@ impl Statement {
     pub fn as_import(&self) -> Option<ImportStatement> {
         match self.clone() {
             Statement::Import(import) => Some(import),
-            _ => None
+            _ => None,
         }
     }
 
     pub fn as_function(&self) -> Option<FunctionStatement> {
         match self.clone() {
             Statement::Function(function) => Some(function),
-            _ => None
+            _ => None,
         }
     }
 }

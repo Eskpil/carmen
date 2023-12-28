@@ -1,9 +1,9 @@
-use core::fmt;
+use super::BinaryOp;
 use crate::lexer::Span;
-use super::{BinaryOp};
-use std::boxed::Box;
-use std::fmt::{Formatter};
+use core::fmt;
 use serde::{Deserialize, Serialize};
+use std::boxed::Box;
+use std::fmt::Formatter;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LookupExpression {
@@ -67,7 +67,25 @@ pub struct UnaryExpression {
 pub struct CallExpression {
     pub span: Span,
     pub name: LookupExpression,
-    pub arguments: Vec<NamedArgument>
+    pub arguments: Vec<NamedArgument>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubstrateExpression {
+    pub span: Span,
+    pub name: LookupExpression,
+    pub expr: Box<Expression>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArrayInitExpression {
+    pub span: Span,
+    pub values: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpreadExpression {
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,15 +98,14 @@ pub enum Expression {
     Binary(BinaryExpression),
     Unary(UnaryExpression),
     Call(CallExpression),
-    Lookup(LookupExpression)
+    Lookup(LookupExpression),
+    Substrate(SubstrateExpression),
+    ArrayInit(ArrayInitExpression),
+    Spread(SpreadExpression),
 }
 
 impl NamedArgument {
-    pub fn new(
-        name: String,
-        expr: Expression,
-        span: Span,
-    ) -> Self {
+    pub fn new(name: String, expr: Expression, span: Span) -> Self {
         Self {
             name,
             span,
@@ -109,6 +126,23 @@ impl Expression {
             Expression::Unary(u) => u.span,
             Expression::Call(c) => c.span,
             Expression::Lookup(l) => l.span,
+            Expression::Substrate(s) => s.span,
+            Expression::ArrayInit(a) => a.span,
+            Expression::Spread(s) => s.span,
+        }
+    }
+
+    pub fn is_spread(&self) -> bool {
+        match self {
+            Expression::Spread(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_substrate(&self) -> bool {
+        match self {
+            Expression::Substrate(_) => true,
+            _ => false,
         }
     }
 
@@ -122,7 +156,14 @@ impl Expression {
     pub fn as_lookup(&self) -> Option<LookupExpression> {
         match self.clone() {
             Expression::Lookup(l) => Some(l),
-            _ => None
+            _ => None,
+        }
+    }
+
+    pub fn as_substrate(&self) -> Option<SubstrateExpression> {
+        match self.clone() {
+            Expression::Substrate(s) => Some(s),
+            _ => None,
         }
     }
 }

@@ -1,10 +1,16 @@
 import "io";
 
-const width = 128;
-const height = 128;
+const width = 5;
+const height = 5;
 
-const cells = width * height;
+var cells: usize[width * height]= [69, ...];
 
 fn main() -> usize {
-    return 10 * cells;
+    cells[12] = 420;
+    cells[10] = 4;
+
+    io.putu(value: cells[12]);
+    io.putu(value: cells[10]);
+
+    return 0;
 }

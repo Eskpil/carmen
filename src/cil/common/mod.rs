@@ -1,6 +1,6 @@
 use core::fmt;
-use std::fmt::Formatter;
 use serde::{Deserialize, Serialize};
+use std::fmt::Formatter;
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Stage {
     Global,
@@ -15,6 +15,12 @@ pub enum Tag {
     Local,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+pub enum Endianness {
+    Big,
+    Little,
+}
+
 pub type Tags = Vec<Tag>;
 
 impl From<String> for Tag {
@@ -24,7 +30,7 @@ impl From<String> for Tag {
             "imported" => Tag::Imported,
             "no_mangle" => Tag::NoMangle,
             "local" => Tag::Local,
-            o => todo!("throw not a tag error: {o}")
+            o => todo!("throw not a tag error: {o}"),
         }
     }
 }

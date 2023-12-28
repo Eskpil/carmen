@@ -1,7 +1,7 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::Iterator;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum TokenKind {
@@ -15,13 +15,14 @@ pub enum TokenKind {
 
     Assignment,
     Let,
+    Var,
+    Const,
 
     Import,
     Function,
     Struct,
     Colon,
     Extern,
-    Const,
 
     If,
     Else,
@@ -31,6 +32,7 @@ pub enum TokenKind {
     Div,
     Mul,
     Dot,
+    Spread,
     Ampersand,
 
     Greater,
@@ -111,6 +113,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Struct => "struct".into(),
             TokenKind::Colon => ":".into(),
             TokenKind::Const => "const".into(),
+            TokenKind::Var => "var".into(),
 
             TokenKind::If => "if".into(),
             TokenKind::Else => "else".into(),
@@ -120,6 +123,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Div => "/".into(),
             TokenKind::Mul => "*".into(),
             TokenKind::Dot => ".".into(),
+            TokenKind::Spread => "...".into(),
             TokenKind::Ampersand => "&".into(),
 
             TokenKind::Greater => ">".into(),
@@ -207,6 +211,7 @@ impl Lexer {
         keywords.insert("extern".into(), TokenKind::Extern);
         keywords.insert("import".into(), TokenKind::Import);
         keywords.insert("const".into(), TokenKind::Const);
+        keywords.insert("var".into(), TokenKind::Var);
 
         Self {
             source,
@@ -349,9 +354,14 @@ impl Iterator for Lexer {
             }
             '.' => {
                 let span = self.span();
-                let token = Token::kind_span(TokenKind::Dot, span);
                 self.advance();
-                Some(token)
+                if self.peek() == '.' && self.peek_next() == '.' {
+                    self.advance();
+                    self.advance();
+                    Some(Token::kind_span(TokenKind::Spread, span))
+                } else {
+                    Some(Token::kind_span(TokenKind::Dot, span))
+                }
             }
             ',' => {
                 let span = self.span();

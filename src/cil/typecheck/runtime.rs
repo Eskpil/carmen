@@ -1,6 +1,10 @@
 use crate::cil::common::Tag;
-use crate::cil::typecheck::type_id::{Primitive};
-use crate::cil::typecheck::typechecked_ast::{Block, CallExpression, Declaration, Expression, ExpressionStatement, FunctionDeclaration, FunctionDefinition, LiteralExpression, Module, ModuleName, ReturnStatement, Signature, Statement};
+use crate::cil::typecheck::type_id::Primitive;
+use crate::cil::typecheck::typechecked_ast::{
+    Block, CallExpression, Declaration, Expression, ExpressionStatement, FunctionDeclaration,
+    FunctionDefinition, LiteralExpression, Module, ModuleName, ReturnStatement, Signature,
+    Statement,
+};
 use crate::cil::typecheck::TypeChecker;
 
 pub struct Runtime {
@@ -18,7 +22,10 @@ impl Runtime {
 
     pub fn generate_main_declaration(&mut self, typechecker: &TypeChecker) {
         let signature = Signature {
-            returns: typechecker.type_pool.find_primitive(&Primitive::U32).expect("could not find U32 primitive"),
+            returns: typechecker
+                .type_pool
+                .find_primitive(&Primitive::U32)
+                .expect("could not find U32 primitive"),
             accepts: vec![],
         };
 
@@ -52,18 +59,23 @@ impl Runtime {
                 name: decl.name,
                 arguments: vec![],
             });
-            block.statements.push(Statement::Expression(ExpressionStatement(call)));
+            block
+                .statements
+                .push(Statement::Expression(ExpressionStatement(call)));
         }
 
         {
             let literal = Expression::Literal(LiteralExpression {
-                typ: typechecker.type_pool.find_primitive(&Primitive::U32).expect("no u32?"),
+                typ: typechecker
+                    .type_pool
+                    .find_primitive(&Primitive::U32)
+                    .expect("no u32?"),
                 value: 0,
             });
 
-            block.statements.push(Statement::Return(ReturnStatement {
-                expr: literal,
-            }))
+            block
+                .statements
+                .push(Statement::Return(ReturnStatement { expr: literal }))
         }
 
         let def = FunctionDefinition {

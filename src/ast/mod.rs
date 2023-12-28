@@ -1,13 +1,13 @@
+pub mod definitions;
 pub mod expressions;
 pub mod statements;
-pub mod definitions;
 
+use crate::lexer::TokenKind;
 use core::fmt;
 use std::fmt::Formatter;
-use crate::lexer::TokenKind;
 use std::process;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub enum BinaryOp {
@@ -55,11 +55,19 @@ impl BinaryOp {
                 eprintln!("Token: {:?} is unsuitable for binary operations.", token);
                 process::exit(1);
             }
-        } 
+        }
     }
 
     pub fn returns_bool(&self) -> bool {
-        matches!(self, BinaryOp::Less | BinaryOp::Greater | BinaryOp::LessEquals | BinaryOp::GreaterEquals | BinaryOp::Equals | BinaryOp::NotEquals )
+        matches!(
+            self,
+            BinaryOp::Less
+                | BinaryOp::Greater
+                | BinaryOp::LessEquals
+                | BinaryOp::GreaterEquals
+                | BinaryOp::Equals
+                | BinaryOp::NotEquals
+        )
     }
 }
 

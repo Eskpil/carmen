@@ -37,12 +37,26 @@ pub struct CallExpression {
 }
 
 #[derive(Debug, Clone)]
+pub struct MemoryReadExpression {
+    pub from: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MemoryWriteExpression {
+    pub to: Box<Expression>,
+    pub value: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expression {
     Literal(LiteralExpression),
     Binary(BinaryExpression),
     VariableLookup(VariableLookupExpression),
     UseData(UseDataExpression),
     Call(CallExpression),
+
+    MemoryRead(MemoryReadExpression),
+    MemoryWrite(MemoryWriteExpression),
 }
 
 #[derive(Debug, Clone)]
@@ -106,17 +120,26 @@ pub struct FunctionDeclaration {
 pub struct DataDeclaration {
     pub name: String,
     pub module_name: ModuleName,
+    pub size: usize,
     pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+pub struct GlobalVariableDeclaration {
+    pub variable_id: VariableId,
+    pub typ: Type,
+    pub expr: Expression,
 }
 
 #[derive(Debug, Clone)]
 pub enum Declaration {
     Function(FunctionDeclaration),
-    Data(DataDeclaration)
+    Data(DataDeclaration),
+    GlobalVariable(GlobalVariableDeclaration),
 }
 
 #[derive(Debug, Clone)]
 pub struct Program {
-    pub declarations: Vec<compressed_ast::Declaration>,
-    pub definitions: Vec<compressed_ast::FunctionDefinition>,
+    pub declarations: Vec<Declaration>,
+    pub definitions: Vec<FunctionDefinition>,
 }

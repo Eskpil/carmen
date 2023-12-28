@@ -1,6 +1,6 @@
 pub mod definitions;
-pub use definitions::*;
 use crate::cil::typecheck::type_id::TypeId;
+pub use definitions::*;
 
 #[derive(Debug, Clone)]
 pub struct Signature {

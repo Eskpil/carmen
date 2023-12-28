@@ -1,14 +1,19 @@
-use cranelift_codegen::ir::{types::*, ExtFuncData, ExternalName, Function, UserExternalName, UserFuncName, Value, Block, InstBuilderBase};
+use cranelift_codegen::ir::{
+    types::*, Block, Endianness, ExtFuncData, ExternalName, Function, InstBuilderBase, MemFlags,
+    UserExternalName, UserFuncName, Value,
+};
 use cranelift_codegen::ir::{AbiParam, InstBuilder, Signature};
-use cranelift_codegen::isa::{lookup};
+use cranelift_codegen::isa::lookup;
 use cranelift_codegen::settings;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
-use cranelift_module::{DataDescription, DataId, default_libcall_names, FuncId, Linkage, Module};
+use cranelift_module::{default_libcall_names, DataDescription, DataId, FuncId, Linkage, Module};
 use cranelift_object::{ObjectBuilder, ObjectModule};
+use std::arch::x86_64::_bittest;
 use target_lexicon::{Architecture, BinaryFormat, Environment, OperatingSystem, Triple, Vendor};
 
-use std::collections::HashMap;
 use cranelift_codegen::ir::condcodes::IntCC;
+use cranelift_codegen::packed_option::ReservedValue;
+use std::collections::HashMap;
 
 use crate::ast::BinaryOp;
 use crate::cil::common::{Tag, Tags};
@@ -21,6 +26,13 @@ struct FuncIdEntry {
     colocated: bool,
 }
 
+#[derive(Debug, Clone)]
+struct PreloadEntry {
+    var: Variable,
+    expr: compressed_ast::Expression,
+    ty: Type,
+}
+
 pub struct Context {
     ctx: cranelift_codegen::Context,
 
@@ -28,6 +40,9 @@ pub struct Context {
 
     func_id_cache: HashMap<String, FuncIdEntry>,
     data_id_cache: HashMap<String, DataId>,
+
+    preloads: Vec<PreloadEntry>,
+
     variables: HashMap<u32, Variable>,
 
     function_has_returned: bool,
@@ -96,6 +111,8 @@ impl Context {
             func_id_cache: HashMap::new(),
             data_id_cache: HashMap::new(),
 
+            preloads: vec![],
+
             variables: HashMap::new(),
 
             function_has_returned: false,
@@ -114,12 +131,18 @@ impl Context {
         Linkage::Local
     }
 
-    pub fn generate_function_declaration(&mut self, declaration: &compressed_ast::FunctionDeclaration) {
+    pub fn generate_function_declaration(
+        &mut self,
+        declaration: &compressed_ast::FunctionDeclaration,
+    ) {
         let mut sig = self.module.make_signature();
         convert_signature(&mut sig, &declaration.signature);
 
         let linkage = Context::determine_function_linkage(&declaration.tags);
-        let func_id = self.module.declare_function(&declaration.name, linkage, &sig).expect("could not declare function");
+        let func_id = self
+            .module
+            .declare_function(&declaration.name, linkage, &sig)
+            .expect("could not declare function");
 
         println!("function: {}@{:?}", declaration.name, linkage);
 
@@ -128,25 +151,48 @@ impl Context {
             colocated = false;
         }
 
-        self.func_id_cache.insert(declaration.name.clone(), FuncIdEntry {
-            id: func_id,
-            sig,
-            colocated,
-        });
+        self.func_id_cache.insert(
+            declaration.name.clone(),
+            FuncIdEntry {
+                id: func_id,
+                sig,
+                colocated,
+            },
+        );
     }
 
     pub fn generate_data_declaration(&mut self, declaration: &compressed_ast::DataDeclaration) {
-        let data_id = self.module.declare_data(&declaration.name, Linkage::Local, true, false).expect("could not declare data");
+        let data_id = self
+            .module
+            .declare_data(&declaration.name, Linkage::Local, true, false)
+            .expect("could not declare data");
 
         let mut data_description = DataDescription::new();
-        let slice = declaration.data.clone().into_boxed_slice();
-        data_description.define(slice);
 
-        self.module.define_data(data_id, &data_description).expect("could not define data");
+        if !declaration.data.is_empty() {
+            let slice = declaration.data.clone().into_boxed_slice();
+            data_description.define(slice);
+        } else {
+            data_description.define_zeroinit(declaration.size);
+        }
 
-        println!("declaring data: {}@{data_id}", declaration.name);
-
+        self.module
+            .define_data(data_id, &data_description)
+            .expect("could not define data");
         self.data_id_cache.insert(declaration.name.clone(), data_id);
+    }
+
+    // TODO: Only preload global variables in functions where they are used. The compressor could probably help us with
+    //       this.
+    pub fn generate_global_variable_declaration(
+        &mut self,
+        declaration: &compressed_ast::GlobalVariableDeclaration,
+    ) {
+        self.preloads.push(PreloadEntry {
+            var: Variable::from_u32(declaration.variable_id),
+            expr: declaration.expr.clone(),
+            ty: convert_type(&declaration.typ),
+        });
     }
 
     pub fn generate_declarations(&mut self, declarations: &[compressed_ast::Declaration]) {
@@ -158,6 +204,9 @@ impl Context {
                 compressed_ast::Declaration::Data(data) => {
                     self.generate_data_declaration(data);
                 }
+                compressed_ast::Declaration::GlobalVariable(global) => {
+                    self.generate_global_variable_declaration(global);
+                }
             }
         }
     }
@@ -168,7 +217,11 @@ impl Context {
         }
     }
 
-    pub fn generate_binary_expression(&mut self, expr: &compressed_ast::BinaryExpression, builder: &mut FunctionBuilder) -> Vec<Value> {
+    pub fn generate_binary_expression(
+        &mut self,
+        expr: &compressed_ast::BinaryExpression,
+        builder: &mut FunctionBuilder,
+    ) -> Vec<Value> {
         let lhs = self.generate_expression(&expr.lhs, builder);
         let rhs = self.generate_expression(&expr.rhs, builder);
 
@@ -185,11 +238,15 @@ impl Context {
             BinaryOp::Mul => {
                 vec![builder.ins().imul(lhs[0], rhs[0])]
             }
-            b => unreachable!("op: {} is not suitable for expression", b)
+            b => unreachable!("op: {} is not suitable for expression", b),
         }
     }
 
-    pub fn generate_binary_condition(&mut self, expr: &compressed_ast::BinaryExpression, builder: &mut FunctionBuilder) -> Vec<Value> {
+    pub fn generate_binary_condition(
+        &mut self,
+        expr: &compressed_ast::BinaryExpression,
+        builder: &mut FunctionBuilder,
+    ) -> Vec<Value> {
         let lhs = self.generate_expression(&expr.lhs, builder);
         let rhs = self.generate_expression(&expr.rhs, builder);
 
@@ -197,37 +254,33 @@ impl Context {
         assert!(!rhs.is_empty());
 
         // TODO: Differentiate signed and unsigned additions.
-        let op = match expr.op  {
-            BinaryOp::Greater => {
-                IntCC::UnsignedGreaterThan
-            }
-            BinaryOp::GreaterEquals => {
-                IntCC::UnsignedGreaterThanOrEqual
-            }
+        let op = match expr.op {
+            BinaryOp::Greater => IntCC::UnsignedGreaterThan,
+            BinaryOp::GreaterEquals => IntCC::UnsignedGreaterThanOrEqual,
 
-            BinaryOp::Less => {
-                IntCC::UnsignedLessThan
-            }
-            BinaryOp::LessEquals => {
-                IntCC::UnsignedLessThanOrEqual
-            }
+            BinaryOp::Less => IntCC::UnsignedLessThan,
+            BinaryOp::LessEquals => IntCC::UnsignedLessThanOrEqual,
 
-            BinaryOp::Equals => {
-                IntCC::Equal
-            }
-            BinaryOp::NotEquals => {
-                IntCC::NotEqual
-            }
-            b => unreachable!("op: {} is not suitable for condition", b)
+            BinaryOp::Equals => IntCC::Equal,
+            BinaryOp::NotEquals => IntCC::NotEqual,
+            b => unreachable!("op: {} is not suitable for condition", b),
         };
 
         vec![builder.ins().icmp(op, lhs[0], rhs[0])]
     }
 
-    pub fn generate_expression(&mut self, expr: &compressed_ast::Expression, builder: &mut FunctionBuilder) -> Vec<Value> {
+    // TODO: x86-64 calling convention does not support more than one return value anyways so we should drop the whole
+    //       Vec<Value> thing.
+    pub fn generate_expression(
+        &mut self,
+        expr: &compressed_ast::Expression,
+        builder: &mut FunctionBuilder,
+    ) -> Vec<Value> {
         match expr {
             compressed_ast::Expression::Literal(lit) => {
-                vec![builder.ins().iconst(convert_type(&lit.typ), lit.value as i64)]
+                vec![builder
+                    .ins()
+                    .iconst(convert_type(&lit.typ), lit.value as i64)]
             }
             compressed_ast::Expression::Binary(bin) => {
                 if bin.op.returns_bool() {
@@ -243,9 +296,13 @@ impl Context {
                 let cache = self.func_id_cache.clone();
                 let func_entry = cache.get(&*call.name).expect("could not find func");
 
-                let func_external_name = builder
-                    .func
-                    .declare_imported_user_function(UserExternalName::new(0, func_entry.id.as_u32()));
+                let func_external_name =
+                    builder
+                        .func
+                        .declare_imported_user_function(UserExternalName::new(
+                            0,
+                            func_entry.id.as_u32(),
+                        ));
 
                 let func_sig_ref = builder.import_signature(func_entry.sig.clone());
                 let func_ref = builder.import_function(ExtFuncData {
@@ -273,10 +330,41 @@ impl Context {
                 let val = builder.ins().global_value(I64, global_value);
                 vec![val]
             }
+            compressed_ast::Expression::MemoryRead(read) => {
+                let memory = self.generate_expression(&read.from, builder);
+                assert!(!memory.is_empty());
+                let memory = memory[0];
+
+                let flags = MemFlags::new();
+                // x86-64 is little endian
+                flags.with_endianness(Endianness::Little);
+                vec![builder.ins().load(I64, flags, memory, 0)]
+            }
+            compressed_ast::Expression::MemoryWrite(write) => {
+                let memory = self.generate_expression(&write.to, builder);
+                assert!(!memory.is_empty());
+                let memory = memory[0];
+
+                let value = self.generate_expression(&write.value, builder);
+                assert!(!value.is_empty());
+                let value = value[0];
+
+                let flags = MemFlags::new();
+                // x86-64 is little endian
+                flags.with_endianness(Endianness::Little);
+                builder.ins().store(flags, value, memory, 0);
+
+                vec![]
+            }
         }
     }
 
-    pub fn generate_statement(&mut self, stmt: &compressed_ast::Statement, parent_block: Block, builder: &mut FunctionBuilder) {
+    pub fn generate_statement(
+        &mut self,
+        stmt: &compressed_ast::Statement,
+        parent_block: Block,
+        builder: &mut FunctionBuilder,
+    ) {
         match stmt {
             compressed_ast::Statement::Return(ret) => {
                 let val = self.generate_expression(&ret.expr, builder);
@@ -285,6 +373,7 @@ impl Context {
             }
             compressed_ast::Statement::DeclareVariable(decl) => {
                 let var = Variable::from_u32(decl.id);
+                println!("declaring: {}: {}", var, convert_type(&decl.typ));
                 builder.declare_var(var, convert_type(&decl.typ));
                 self.variables.insert(decl.id, var);
             }
@@ -292,8 +381,11 @@ impl Context {
                 let cache = self.variables.clone();
                 let var = cache.get(&def.id).expect("no variable?!?");
 
+                println!("defining: {:?}", def.expr);
+
                 let val = self.generate_expression(&def.expr, builder);
-                assert_eq!(val.len(), 1);
+                assert!(!val.is_empty());
+
                 builder.def_var(*var, val[0]);
             }
             compressed_ast::Statement::Expression(expr) => {
@@ -326,7 +418,6 @@ impl Context {
                     builder.ins().jump(cond_block, &[]);
                 }
 
-
                 builder.switch_to_block(end_block);
                 builder.seal_block(end_block);
 
@@ -336,10 +427,26 @@ impl Context {
         }
     }
 
-    pub fn fill_block_without_parameters(&mut self, block: &compressed_ast::Block, parent_block: Block, builder: &mut FunctionBuilder) {
+    pub fn fill_block_without_parameters(
+        &mut self,
+        block: &compressed_ast::Block,
+        parent_block: Block,
+        builder: &mut FunctionBuilder,
+    ) {
         for stmt in &block.body {
             self.generate_statement(stmt, parent_block, builder);
         }
+    }
+
+    pub fn generate_preload(&mut self, preload: &PreloadEntry, builder: &mut FunctionBuilder) {
+        let val = self.generate_expression(&preload.expr, builder);
+        assert!(!val.is_empty());
+        let val = val[0];
+
+        builder.declare_var(preload.var, preload.ty);
+        builder.def_var(preload.var, val);
+
+        self.variables.insert(preload.var.as_u32(), preload.var);
     }
 
     pub fn generate_block(&mut self, block: &compressed_ast::Block, builder: &mut FunctionBuilder) {
@@ -363,18 +470,31 @@ impl Context {
             i += 1;
         }
 
+        let preload_cache = self.preloads.clone();
+        for preload in preload_cache.iter() {
+            self.generate_preload(preload, builder);
+        }
+
         for stmt in &block.body {
             self.generate_statement(stmt, ir_block, builder);
         }
 
         builder.seal_block(ir_block);
     }
-    pub fn generate_function_definition(&mut self, definition: &compressed_ast::FunctionDefinition) {
+    pub fn generate_function_definition(
+        &mut self,
+        definition: &compressed_ast::FunctionDefinition,
+    ) {
         // inefficient, i do not care. Borrow checker got me tired.
         let cache = self.func_id_cache.clone();
-        let entry = cache.get(&*definition.for_declaration).expect("could not find entry");
+        let entry = cache
+            .get(&*definition.for_declaration)
+            .expect("could not find entry");
 
-        let mut func = Function::with_name_signature(UserFuncName::user(0, entry.id.as_u32()), entry.sig.clone());
+        let mut func = Function::with_name_signature(
+            UserFuncName::user(0, entry.id.as_u32()),
+            entry.sig.clone(),
+        );
 
         let mut builder_context = FunctionBuilderContext::new();
         let mut builder = FunctionBuilder::new(&mut func, &mut builder_context);

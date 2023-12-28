@@ -1,7 +1,7 @@
 use crate::ast::BinaryOp;
 use crate::cil::common::Tag;
-use crate::cil::typecheck::{Variable, typechecked_ast::Signature, ModuleId, constants};
 use crate::cil::typecheck::type_id::TypeId;
+use crate::cil::typecheck::{constants, typechecked_ast::Signature, ModuleId, Variable};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleName {
@@ -19,14 +19,23 @@ pub struct FunctionDeclaration {
 #[derive(Debug, Clone)]
 pub struct DataDeclaration {
     pub name: ModuleName,
+    pub size: usize,
     pub data: Vec<u8>,
     pub tags: Vec<Tag>,
 }
 
 #[derive(Debug, Clone)]
+pub struct GlobalVariableDeclaration {
+    pub variable: Variable,
+    pub name: ModuleName,
+    pub expr: Expression,
+}
+
+#[derive(Debug, Clone)]
 pub enum Declaration {
     Function(FunctionDeclaration),
-    Data(DataDeclaration)
+    Data(DataDeclaration),
+    GlobalVariable(GlobalVariableDeclaration),
 }
 
 #[derive(Debug, Clone)]
@@ -39,13 +48,13 @@ pub struct LiteralExpression {
 pub struct BinaryExpression {
     pub op: BinaryOp,
     pub lhs: Box<Expression>,
-    pub rhs: Box<Expression>
+    pub rhs: Box<Expression>,
 }
 
 #[derive(Debug, Clone)]
 pub struct CallExpression {
     pub name: ModuleName,
-    pub arguments: Vec<Expression>
+    pub arguments: Vec<Expression>,
 }
 
 #[derive(Debug, Clone)]
@@ -56,11 +65,31 @@ pub struct VariableLookupExpression {
 #[derive(Debug, Clone)]
 pub struct UseDataExpression {
     pub name: ModuleName,
+    pub type_id: TypeId,
 }
 
 #[derive(Debug, Clone)]
 pub struct BooleanExpression {
     pub value: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubstrateExpression {
+    pub type_id: TypeId,
+    pub on: Box<Expression>,
+    pub offset: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReadExpression {
+    pub from: Box<Expression>,
+    pub type_id: TypeId,
+}
+
+#[derive(Debug, Clone)]
+pub struct WriteExpression {
+    pub to: Box<Expression>,
+    pub value: Box<Expression>,
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +100,10 @@ pub enum Expression {
     VariableLookup(VariableLookupExpression),
     UseData(UseDataExpression),
     Bool(BooleanExpression),
+    Substrate(SubstrateExpression),
+
+    Read(ReadExpression),
+    Write(WriteExpression),
 }
 
 #[derive(Debug, Clone)]
@@ -104,7 +137,7 @@ pub enum Statement {
     DeclareVariable(DeclareVariableStatement),
     DefineVariable(DefineVariableStatement),
     Expression(ExpressionStatement),
-    While(WhileStatement)
+    While(WhileStatement),
 }
 
 #[derive(Debug, Clone)]
@@ -133,16 +166,16 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn new(id: ModuleId, name: String) -> Self{
-       Self {
-           id,
-           name,
-           imports: vec![],
-           declarations: vec![],
-           definitions: vec![],
+    pub fn new(id: ModuleId, name: String) -> Self {
+        Self {
+            id,
+            name,
+            imports: vec![],
+            declarations: vec![],
+            definitions: vec![],
 
-           constants: vec![],
-       }
+            constants: vec![],
+        }
     }
 
     pub fn has_function_declaration(&self, name: String) -> bool {
@@ -157,7 +190,7 @@ impl Module {
                         return Some(func.clone());
                     }
                 }
-                _ => continue
+                _ => continue,
             }
         }
 
