@@ -188,6 +188,25 @@ impl TypeId {
         }
     }
 
+    #[inline]
+    pub fn is_boolean_class(&self) -> bool {
+        if self.is_void() {
+            false
+        } else {
+            match self.tag {
+                Tag::Primitive => {
+                    let primitive = self.to_primitive();
+                    primitive == Primitive::Bool
+                }
+                Tag::Alias => {
+                    let alias = self.to_alias();
+                    alias.to.is_boolean_class()
+                }
+                _ => false
+            }
+        }
+    }
+
     pub fn size(&self) -> usize {
         match self.tag {
             Tag::Primitive => {

@@ -9,13 +9,7 @@ use crate::ast::BinaryOp;
 use crate::cil::common::{expand_tags, Endianness, Stage};
 use crate::cil::typecheck::runtime::Runtime;
 use crate::cil::typecheck::type_id::{aliases, Primitive, Slice, TypeId, TypePool};
-use crate::cil::typecheck::typechecked_ast::{
-    BinaryExpression, Block, BooleanExpression, CallExpression, DataDeclaration, Declaration,
-    DeclareVariableStatement, DefineVariableStatement, Expression, ExpressionStatement,
-    FunctionDeclaration, FunctionDefinition, GlobalVariableDeclaration, LiteralExpression, Module,
-    ModuleName, ReadExpression, ReturnStatement, Signature, Statement, SubstrateExpression,
-    UseDataExpression, VariableLookupExpression, WhileStatement, WriteExpression,
-};
+use crate::cil::typecheck::typechecked_ast::{BinaryExpression, Block, BooleanExpression, CallExpression, DataDeclaration, Declaration, DeclareVariableStatement, DefineVariableStatement, Expression, ExpressionStatement, FunctionDeclaration, FunctionDefinition, GlobalVariableDeclaration, IfStatement, LiteralExpression, Module, ModuleName, ReadExpression, ReturnStatement, Signature, Statement, SubstrateExpression, UseDataExpression, VariableLookupExpression, WhileStatement, WriteExpression};
 use rand::distributions::{Alphanumeric, DistString};
 use std::collections::{HashMap, VecDeque};
 use std::ops::Index;
@@ -847,6 +841,20 @@ impl TypeChecker {
                 }
                 ast::statements::Statement::Const(_) => {
                     todo!("in block constants")
+                }
+                ast::statements::Statement::If(stmt) => {
+                    let mut context = ExpressionContext::default();
+                    let condition = self.typecheck_expression(&mut context, &stmt.cond, module);
+                    if !self.expression_returns(&condition, module).is_boolean_class() {
+                        todo!("throw expression not suitable error");
+                    }
+
+                    let if_block = self.typecheck_block(&stmt.if_block, module);
+
+                    vec![Statement::If(IfStatement {
+                        condition,
+                        if_block,
+                    })]
                 }
                 s => todo!("implement s: {:?}", s),
             };

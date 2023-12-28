@@ -2,10 +2,7 @@ pub mod compressed_ast;
 
 use crate::ast::BinaryOp;
 use crate::cil::common::Tag;
-use crate::cil::compressed::compressed_ast::{
-    Block, DeclareVariableStatement, DefineVariableStatement, ExpressionStatement, Integer,
-    LoopStatement, MemoryReadExpression, MemoryWriteExpression,
-};
+use crate::cil::compressed::compressed_ast::{Block, DeclareVariableStatement, DefineVariableStatement, ExpressionStatement, IfStatement, Integer, LoopStatement, MemoryReadExpression, MemoryWriteExpression};
 use crate::cil::typecheck::type_id::Type;
 use crate::cil::typecheck::type_id::{Alias, Primitive};
 use crate::cil::typecheck::{
@@ -361,6 +358,19 @@ impl Compressor {
         compressed_ast::Statement::Loop(LoopStatement { cond, block })
     }
 
+    pub fn compress_if_statement(
+        &mut self,
+        typechecked_if: &typechecked_ast::IfStatement,
+    ) -> compressed_ast::Statement {
+        let cond = self.compress_expression(&typechecked_if.condition);
+        let if_block = self.compress_block(&typechecked_if.if_block);
+
+        compressed_ast::Statement::If(IfStatement {
+            cond,
+            if_block,
+        })
+    }
+
     pub fn compress_statement(
         &mut self,
         typechecked_statement: &typechecked_ast::Statement,
@@ -377,6 +387,7 @@ impl Compressor {
                 self.compress_expression_statement(expr)
             }
             typechecked_ast::Statement::While(w) => self.compress_while_statement(w),
+            typechecked_ast::Statement::If(i) => self.compress_if_statement(i),
         }
     }
 

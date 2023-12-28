@@ -8,14 +8,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IfStatement {
     pub span: Span,
-
     pub cond: Expression,
 
-    pub if_block: Vec<Statement>,
-    pub if_span: Span,
-
-    pub else_block: Option<Vec<Statement>>,
-    pub else_span: Option<Span>,
+    pub if_block: BlockStatement,
+    pub else_block: Option<BlockStatement>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -132,18 +128,14 @@ impl IfStatement {
     pub fn new(
         span: Span,
         cond: Expression,
-        if_block: Vec<Statement>,
-        if_span: Span,
-        else_block: Option<Vec<Statement>>,
-        else_span: Option<Span>,
+        if_block: BlockStatement,
+        else_block: Option<BlockStatement>,
     ) -> Self {
         Self {
             span,
             cond,
             if_block,
-            if_span,
             else_block,
-            else_span,
         }
     }
 }
@@ -166,6 +158,13 @@ impl Statement {
         match self.clone() {
             Statement::Function(function) => Some(function),
             _ => None,
+        }
+    }
+
+    pub fn as_block(&self) -> Option<BlockStatement> {
+        match self.clone() {
+            Statement::Block(block) => Some(block),
+            _ => None
         }
     }
 }

@@ -132,12 +132,19 @@ pub struct WhileStatement {
 }
 
 #[derive(Debug, Clone)]
+pub struct IfStatement {
+    pub condition: Expression,
+    pub if_block: Block,
+}
+
+#[derive(Debug, Clone)]
 pub enum Statement {
     Return(ReturnStatement),
     DeclareVariable(DeclareVariableStatement),
     DefineVariable(DefineVariableStatement),
     Expression(ExpressionStatement),
     While(WhileStatement),
+    If(IfStatement),
 }
 
 #[derive(Debug, Clone)]

@@ -9,6 +9,10 @@ fn main() -> usize {
     cells[12] = 420;
     cells[10] = 4;
 
+    if 10 > 2 {
+        io.print(message: "Hello, World!\n");
+    };
+
     io.putu(value: cells[12]);
     io.putu(value: cells[10]);
 

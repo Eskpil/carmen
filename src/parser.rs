@@ -493,19 +493,16 @@ impl Parser {
     pub fn parse_if_statement(&mut self) -> ParseResult<Statement> {
         let start = self.consume_next(TokenKind::If)?;
         let cond = self.parse_expression(0, None)?;
-        let (if_span, if_block) = self.parse_block_body()?;
+        let if_block = self.parse_block()?;
 
-        let mut else_block: Option<Vec<Statement>> = None;
-        let mut else_span: Option<Span> = None;
+        let mut else_block = None;
 
         if self.peek() == TokenKind::Else {
             self.consume(TokenKind::Else)?;
-            let (span, block) = self.parse_block_body()?;
-            else_block = Some(block);
-            else_span = Some(span);
+            else_block = Some(self.parse_block()?.as_block().unwrap());
         }
 
-        let x = IfStatement::new(start.span, cond, if_block, if_span, else_block, else_span);
+        let x = IfStatement::new(start.span, cond, if_block.as_block().unwrap(), else_block);
 
         Ok(Statement::If(x))
     }

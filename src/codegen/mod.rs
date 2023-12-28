@@ -409,6 +409,40 @@ impl Context {
                 builder.seal_block(cond_block);
                 builder.seal_block(body_block);
             }
+            compressed_ast::Statement::If(i) => {
+                let cond_block = builder.create_block();
+                let if_body_block = builder.create_block();
+                let end_block = builder.create_block();
+
+                // If the if statement is the first statement in a block cranelift will complain that we can not
+                // switch to another block before filling the previous. Cranelift did not tolerate a nop so we introduce
+                // a redundant jump to the condition block. This should be solved some other way. This could be solved
+                // by determining if the parent_block has been filled. If not, just use the parent block for the
+                // condition.
+                builder.ins().jump(cond_block, &[]);
+
+                builder.switch_to_block(cond_block);
+                {
+                    let res = self.generate_expression(&i.cond, builder);
+                    assert_eq!(1, res.len());
+                    let res = res[0];
+
+                    builder.ins().brif(res, if_body_block, &[], end_block, &[]);
+                }
+
+                builder.switch_to_block(if_body_block);
+                {
+                    self.fill_block_without_parameters(&i.if_block, builder);
+                    builder.ins().jump(end_block, &[]);
+                }
+
+                builder.seal_block(cond_block);
+                builder.seal_block(if_body_block);
+
+                builder.switch_to_block(end_block);
+                builder.seal_block(end_block);
+            }
+
         }
     }
 
