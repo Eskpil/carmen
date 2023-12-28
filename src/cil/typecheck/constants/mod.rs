@@ -170,7 +170,6 @@ fn lookup_to_resolved_module_name(
     lookup: &LookupExpression,
     current_module_name: String,
 ) -> ResolvedModuleName {
-    println!("has_child: {}", lookup.child.is_some());
     let mut module = String::from("");
     let mut name = String::from("");
     if lookup.child.is_some() {

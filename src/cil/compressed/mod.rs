@@ -216,11 +216,6 @@ impl Compressor {
         &mut self,
         typechecked_call: &typechecked_ast::CallExpression,
     ) -> compressed_ast::Expression {
-        println!(
-            "calling: ({})@{}",
-            typechecked_call.name.id, typechecked_call.name.name
-        );
-
         let decl = self.find_function_decl_by_module_name(&typechecked_call.name);
         let mut arguments = vec![];
         for arg in &typechecked_call.arguments {

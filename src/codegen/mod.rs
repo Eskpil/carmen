@@ -144,8 +144,6 @@ impl Context {
             .declare_function(&declaration.name, linkage, &sig)
             .expect("could not declare function");
 
-        println!("function: {}@{:?}", declaration.name, linkage);
-
         let mut colocated = true;
         if linkage == Linkage::Import {
             colocated = false;
@@ -373,15 +371,12 @@ impl Context {
             }
             compressed_ast::Statement::DeclareVariable(decl) => {
                 let var = Variable::from_u32(decl.id);
-                println!("declaring: {}: {}", var, convert_type(&decl.typ));
                 builder.declare_var(var, convert_type(&decl.typ));
                 self.variables.insert(decl.id, var);
             }
             compressed_ast::Statement::DefineVariable(def) => {
                 let cache = self.variables.clone();
                 let var = cache.get(&def.id).expect("no variable?!?");
-
-                println!("defining: {:?}", def.expr);
 
                 let val = self.generate_expression(&def.expr, builder);
                 assert!(!val.is_empty());
