@@ -364,10 +364,15 @@ impl Compressor {
     ) -> compressed_ast::Statement {
         let cond = self.compress_expression(&typechecked_if.condition);
         let if_block = self.compress_block(&typechecked_if.if_block);
+        let mut else_block = None;
+        if let Some(block) = &typechecked_if.else_block {
+            else_block = Some(self.compress_block(block));
+        }
 
         compressed_ast::Statement::If(IfStatement {
             cond,
             if_block,
+            else_block,
         })
     }
 

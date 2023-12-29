@@ -90,6 +90,7 @@ pub struct LoopStatement {
 pub struct IfStatement {
     pub cond: Expression,
     pub if_block: Block,
+    pub else_block: Option<Block>,
 }
 
 #[derive(Debug, Clone)]

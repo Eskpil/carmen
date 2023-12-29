@@ -850,10 +850,16 @@ impl TypeChecker {
                     }
 
                     let if_block = self.typecheck_block(&stmt.if_block, module);
+                    let mut else_block = None;
+                    if let Some(block) = &stmt.else_block {
+                        else_block = Some(self.typecheck_block(block, module));
+                    }
+
 
                     vec![Statement::If(IfStatement {
                         condition,
                         if_block,
+                        else_block,
                     })]
                 }
                 s => todo!("implement s: {:?}", s),

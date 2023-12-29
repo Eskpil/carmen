@@ -413,6 +413,7 @@ impl Context {
                 let cond_block = builder.create_block();
                 let if_body_block = builder.create_block();
                 let end_block = builder.create_block();
+                let else_block = builder.create_block();
 
                 // If the if statement is the first statement in a block cranelift will complain that we can not
                 // switch to another block before filling the previous. Cranelift did not tolerate a nop so we introduce
@@ -427,13 +428,26 @@ impl Context {
                     assert_eq!(1, res.len());
                     let res = res[0];
 
-                    builder.ins().brif(res, if_body_block, &[], end_block, &[]);
+                    let mut target = end_block;
+                    if i.else_block.is_some() {
+                        target = else_block;
+                    }
+
+                    builder.ins().brif(res, if_body_block, &[], target, &[]);
                 }
 
                 builder.switch_to_block(if_body_block);
                 {
                     self.fill_block_without_parameters(&i.if_block, builder);
                     builder.ins().jump(end_block, &[]);
+                }
+                if let Some(else_) = &i.else_block {
+                    builder.switch_to_block(else_block);
+                    {
+                        self.fill_block_without_parameters(&else_, builder);
+                        builder.ins().jump(end_block, &[]);
+                    }
+                    builder.seal_block(else_block);
                 }
 
                 builder.seal_block(cond_block);

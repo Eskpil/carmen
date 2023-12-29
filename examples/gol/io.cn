@@ -8,3 +8,11 @@ fn print(buf: *u8) -> usize {
 fn putu(value: usize) {
     syscalls.putusize(value: value);
 }
+
+fn putb(value: bool) {
+    if value {
+        print(message: "true\n");
+    } else {
+        print(message: "false\n");
+    }
+}

@@ -135,6 +135,7 @@ pub struct WhileStatement {
 pub struct IfStatement {
     pub condition: Expression,
     pub if_block: Block,
+    pub else_block: Option<Block>,
 }
 
 #[derive(Debug, Clone)]

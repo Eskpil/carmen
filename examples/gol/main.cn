@@ -3,18 +3,18 @@ import "io";
 const width = 5;
 const height = 5;
 
-var cells: usize[width * height]= [69, ...];
+var cells: bool[width * height]= [69, ...];
 
 fn main() -> usize {
-    cells[12] = 420;
-    cells[10] = 4;
+    cells[12] = true;
+    cells[10] = false;
 
     if 10 > 2 {
         io.print(message: "Hello, World!\n");
     }
 
-    io.putu(value: cells[12]);
-    io.putu(value: cells[10]);
+    io.putb(value: cells[12]);
+    io.putb(value: cells[10]);
 
     return 0;
 }
