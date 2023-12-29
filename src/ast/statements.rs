@@ -32,7 +32,7 @@ pub struct FunctionStatement {
     pub span: Span,
     pub name: String,
     pub parameters: Vec<NamedParameter>,
-    pub block: BlockStatement,
+    pub block: Option<BlockStatement>,
     pub return_type: ExplicitType,
     pub external: bool,
     pub tags: Tags,

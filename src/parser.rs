@@ -34,8 +34,6 @@ pub struct Parser {
     file_name: String,
     input: String,
 
-    in_function: bool,
-
     pub ended: bool,
 
     tag_context: Option<TagContext>,
@@ -90,8 +88,6 @@ impl Parser {
             lexer: Lexer::new(input.clone(), file_name.clone()).peekable(),
             file_name: file_name.clone(),
             input: input.clone(),
-
-            in_function: false,
 
             ended: false,
 
@@ -432,18 +428,13 @@ impl Parser {
                 body.push(self.parse_statement()?);
             } else {
                 let expr = self.parse_expression(0, None)?;
+                let _ = self.consume_next(TokenKind::Semicolon)?;
                 let stmt = Statement::Expression(ExpressionStatement {
                     span: expr.span(),
                     expr,
                 });
                 body.push(stmt);
             }
-
-            if !self.at(TokenKind::Semicolon) {
-                break;
-            }
-
-            self.consume(TokenKind::Semicolon)?;
         }
 
         self.consume(TokenKind::RightCurly)?;
@@ -478,9 +469,7 @@ impl Parser {
             expr = self.parse_expression(0, None)?;
         }
 
-        if !self.in_function && self.at(TokenKind::Semicolon) {
-            self.consume(TokenKind::Semicolon)?;
-        }
+        let _ = self.consume_next(TokenKind::Semicolon)?;
 
         Ok(Statement::Let(LetStatement {
             span: start.span,
@@ -551,18 +540,18 @@ impl Parser {
     }
 
     pub fn parse_return(&mut self) -> ParseResult<Statement> {
-        self.consume(TokenKind::Return)?;
+        let start = self.consume_next(TokenKind::Return)?;
         let expr = self.parse_expression(0, None)?;
+        let _ = self.consume_next(TokenKind::Semicolon)?;
 
         Ok(Statement::Return(ReturnStatement {
-            span: expr.span(),
+            span: start.span,
             expr,
         }))
     }
 
+    // TODO: Clean
     pub fn parse_function(&mut self, external: bool) -> ParseResult<Statement> {
-        self.in_function = true;
-
         let start = self.consume_next(TokenKind::Function)?;
         let name = self.consume_next(TokenKind::Identifier)?.value.clone();
         let mut parameters = Vec::<NamedParameter>::new();
@@ -594,13 +583,12 @@ impl Parser {
             returning = self.parse_defined_type()?;
         }
 
-        let mut span = Span::default();
-        let mut body: Vec<Statement> = vec![];
+        let mut block = None;
 
         if self.peek() == TokenKind::Semicolon {
             self.consume(TokenKind::Semicolon)?;
         } else if self.peek() == TokenKind::LeftCurly {
-            (span, body) = self.parse_block_body()?;
+            block = self.parse_block()?.as_block();
         } else {
             return Err(
                 OceanError::new(
@@ -627,15 +615,11 @@ impl Parser {
             span: start.span,
             name,
             parameters,
-            block: BlockStatement {
-                span: span.clone(),
-                statements: body.clone(),
-            },
+            block,
             return_type: returning,
             external,
             tags,
         });
-        self.in_function = false;
 
         Ok(function)
     }
@@ -652,11 +636,13 @@ impl Parser {
         }))
     }
 
+    // TODO: Clean
     pub fn parse_definition_statement(&mut self) -> ParseResult<Statement> {
         let name = self.consume_next(TokenKind::Identifier)?;
         let mut name = self.parse_identifier(name)?;
         if self.peek() == TokenKind::LeftParen {
             let expr = self.parse_function_call(name)?;
+            let _ = self.consume_next(TokenKind::Semicolon)?;
             return Ok(Statement::Expression(ExpressionStatement {
                 span: expr.span(),
                 expr,
@@ -669,6 +655,8 @@ impl Parser {
 
         let _ = self.consume_next(TokenKind::Assignment);
         let expr = self.parse_expression(0, None)?;
+
+        let _ = self.consume_next(TokenKind::Semicolon)?;
 
         if name.is_substrate() {
             Ok(Statement::DefineSubstrate(DefineSubstrateStatement {
@@ -769,6 +757,7 @@ impl Parser {
             }
             TokenKind::Literal => {
                 let expr = self.parse_expression(0, None)?;
+                let _ = self.consume_next(TokenKind::Semicolon)?;
                 let stmt = Statement::Expression(ExpressionStatement {
                     span: expr.span(),
                     expr,

@@ -22,6 +22,7 @@ pub struct OceanError {
 
 impl OceanError {
     pub fn new(level: Level, step: Step, span: Span, message: String) -> Self {
+//        panic!("{}:{}:{}  {message}", span.file_name, span.row, span.col);
         Self {
             step,
             level,

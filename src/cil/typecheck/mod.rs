@@ -898,7 +898,7 @@ impl TypeChecker {
         let parameters = scope.variables.clone();
 
         self.insert_scope(scope);
-        let mut block = self.typecheck_block(&function.block, module);
+        let mut block = self.typecheck_block(&function.block.as_ref().unwrap(), module);
         block.parameters = parameters;
 
         FunctionDefinition {
@@ -914,7 +914,7 @@ impl TypeChecker {
     ) {
         for stmt in &ast_module.statements {
             if let Some(function) = stmt.as_function() {
-                if function.block.is_empty() {
+                if function.block.is_none() {
                     continue;
                 }
                 let definition = self.typecheck_function_definition(&function, module);
