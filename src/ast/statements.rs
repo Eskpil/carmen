@@ -34,7 +34,6 @@ pub struct FunctionStatement {
     pub parameters: Vec<NamedParameter>,
     pub block: Option<BlockStatement>,
     pub return_type: ExplicitType,
-    pub external: bool,
     pub tags: Tags,
 }
 

@@ -422,7 +422,6 @@ impl Parser {
                 TokenKind::While,
                 TokenKind::LeftCurly,
                 TokenKind::Return,
-                TokenKind::Extern,
                 TokenKind::Identifier,
             ]) {
                 body.push(self.parse_statement()?);
@@ -551,7 +550,7 @@ impl Parser {
     }
 
     // TODO: Clean
-    pub fn parse_function(&mut self, external: bool) -> ParseResult<Statement> {
+    pub fn parse_function(&mut self) -> ParseResult<Statement> {
         let start = self.consume_next(TokenKind::Function)?;
         let name = self.consume_next(TokenKind::Identifier)?.value.clone();
         let mut parameters = Vec::<NamedParameter>::new();
@@ -617,7 +616,6 @@ impl Parser {
             parameters,
             block,
             return_type: returning,
-            external,
             tags,
         });
 
@@ -747,14 +745,10 @@ impl Parser {
         match self.peek() {
             TokenKind::Let => self.parse_let_statement(),
             TokenKind::LeftCurly => self.parse_block(),
-            TokenKind::Function => self.parse_function(false),
+            TokenKind::Function => self.parse_function(),
             TokenKind::If => self.parse_if_statement(),
             TokenKind::While => self.parse_while_loop(),
             TokenKind::Return => self.parse_return(),
-            TokenKind::Extern => {
-                self.consume(TokenKind::Extern)?;
-                self.parse_function(true)
-            }
             TokenKind::Literal => {
                 let expr = self.parse_expression(0, None)?;
                 let _ = self.consume_next(TokenKind::Semicolon)?;
