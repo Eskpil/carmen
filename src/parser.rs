@@ -125,11 +125,6 @@ impl Parser {
         self.peek() == kind
     }
 
-    #[inline(always)]
-    pub fn multi_at(&mut self, kinds: &'static [TokenKind]) -> bool {
-        kinds.contains(&self.peek())
-    }
-
     pub fn consume(&mut self, expected: TokenKind) -> SyntaxResult<()> {
         let token = self.next_token()?;
         if token.kind != expected {
@@ -415,28 +410,9 @@ impl Parser {
         let mut body = Vec::<Statement>::new();
 
         while !self.at(TokenKind::RightCurly) {
-            if self.multi_at(&[
-                TokenKind::If,
-                TokenKind::Let,
-                TokenKind::Function,
-                TokenKind::While,
-                TokenKind::LeftCurly,
-                TokenKind::Return,
-                TokenKind::Identifier,
-            ]) {
-                body.push(self.parse_statement()?);
-            } else {
-                let expr = self.parse_expression(0, None)?;
-                let _ = self.consume_next(TokenKind::Semicolon)?;
-                let stmt = Statement::Expression(ExpressionStatement {
-                    span: expr.span(),
-                    expr,
-                });
-                body.push(stmt);
-            }
+            body.push(self.parse_statement()?);
         }
-
-        self.consume(TokenKind::RightCurly)?;
+        let _ = self.consume_next(TokenKind::RightCurly)?;
 
         Ok((start.span.clone(), body))
     }
